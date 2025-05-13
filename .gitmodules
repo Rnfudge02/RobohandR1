@@ -1,0 +1,9 @@
+[submodule "Dependencies/pico-sdk"]
+	path = Dependencies/pico-sdk
+	url = https://github.com/raspberrypi/pico-sdk.git
+[submodule "Dependencies/bmm350-sensorapi"]
+	path = Dependencies/bmm350-sensorapi
+	url = https://github.com/boschsensortec/BMM350_SensorAPI.git
+[submodule "Dependencies/bmp390-sensorapi"]
+	path = Dependencies/bmp390-sensorapi
+	url = https://github.com/boschsensortec/BMP3_SensorAPI.git
