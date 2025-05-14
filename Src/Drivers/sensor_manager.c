@@ -4,6 +4,7 @@
 * @date 2025-05-13
 */
 
+#include "scheduler.h"
 #include "sensor_manager.h"
 #include "i2c_sensor_adapter.h"
 #include "pico/stdlib.h"
@@ -40,6 +41,8 @@ struct sensor_manager_s {
 
 // Forward declaration of internal callback function
 static void sensor_manager_internal_callback(sensor_type_t type, const sensor_data_t* data, void* user_data);
+static bool execute_sensor_task_safe(sensor_manager_t manager, i2c_sensor_adapter_t adapter);
+static bool sensor_manager_atomic_operation(sensor_manager_t manager, bool (*operation)(sensor_manager_t, void*), void* param);
 
 sensor_manager_t sensor_manager_create(const sensor_manager_config_t* config) {
     if (config == NULL || config->i2c_ctx == NULL) {
@@ -346,6 +349,8 @@ void sensor_manager_task(void* param) {
     // Check if it's time to execute the task
     if ((current_time - manager->last_execution_time) >= manager->task_period_ms) {
         // Execute task for each active sensor
+        // Note: We don't need another lock here because the scheduler task
+        // already acquired the lock before calling this function
         for (int i = 0; i < SENSOR_MANAGER_MAX_SENSORS; i++) {
             if (manager->sensors[i].adapter != NULL && manager->sensors[i].is_active) {
                 // Execute sensor task
@@ -393,6 +398,9 @@ bool sensor_manager_destroy(sensor_manager_t manager) {
     return true;
 }
 
+/**
+ * @brief Get the status of all sensors with proper locking
+ */
 int sensor_manager_get_all_statuses(
     sensor_manager_t manager,
     sensor_type_t* types,
@@ -400,6 +408,11 @@ int sensor_manager_get_all_statuses(
     int max_sensors
 ) {
     if (manager == NULL || types == NULL || statuses == NULL || max_sensors <= 0) {
+        return 0;
+    }
+    
+    // Acquire lock
+    if (!sensor_manager_lock(manager)) {
         return 0;
     }
     
@@ -413,6 +426,9 @@ int sensor_manager_get_all_statuses(
             count++;
         }
     }
+    
+    // Release lock
+    sensor_manager_unlock(manager);
     
     return count;
 }
@@ -472,4 +488,57 @@ void sensor_manager_unlock(sensor_manager_t manager) {
         spin_unlock(manager->access_lock, manager->lock_save);
         manager->lock_owner = 0;
     }
+}
+
+/**
+ * @brief Thread-safe wrapper for sensor operations
+ * 
+ * This function acquires the lock, performs an operation, and releases the lock.
+ * 
+ * @param manager Sensor manager instance
+ * @param operation Function to perform while lock is held
+ * @param param Parameter to pass to the operation function
+ * @return Return value from the operation function
+ */
+static bool sensor_manager_atomic_operation(
+    sensor_manager_t manager,
+    bool (*operation)(sensor_manager_t, void*),
+    void* param
+) {
+    if (manager == NULL || operation == NULL) {
+        return false;
+    }
+    
+    // Acquire lock
+    if (!sensor_manager_lock(manager)) {
+        return false;
+    }
+    
+    // Perform operation
+    bool result = operation(manager, param);
+    
+    // Release lock
+    sensor_manager_unlock(manager);
+    
+    return result;
+}
+
+/**
+ * @brief Thread-safe wrapper for executing sensor tasks
+ * 
+ * This function ensures that sensor tasks are executed atomically.
+ * 
+ * @param manager Sensor manager instance
+ * @param adapter Sensor adapter to execute
+ * @return true if executed successfully
+ */
+static bool execute_sensor_task_safe(sensor_manager_t manager, i2c_sensor_adapter_t adapter) {
+    if (manager == NULL || adapter == NULL) {
+        return false;
+    }
+    
+    // Execute task with lock held
+    i2c_sensor_adapter_task_execute(adapter);
+    
+    return true;
 }

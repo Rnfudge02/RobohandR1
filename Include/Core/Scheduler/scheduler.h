@@ -66,6 +66,35 @@ extern "C" {
 /** @} */
 
 /**
+ * @enum deadline_type_t
+ * @brief Task deadline types
+ * 
+ * Defines the type of deadline for a task.
+ */
+typedef enum {
+    DEADLINE_NONE = 0,    /**< No deadline requirements */
+    DEADLINE_SOFT,        /**< Soft deadline (best effort) */
+    DEADLINE_HARD         /**< Hard deadline (critical) */
+} deadline_type_t;
+
+/**
+ * @struct deadline_info_t
+ * @brief Task deadline information
+ * 
+ * Contains information about a task's deadline requirements.
+ */
+typedef struct {
+    deadline_type_t type;          /**< Type of deadline */
+    uint32_t period_ms;            /**< Task period in milliseconds */
+    uint32_t deadline_ms;          /**< Deadline relative to period start */
+    uint32_t execution_budget_us;  /**< Maximum execution time budget */
+    uint32_t deadline_misses;      /**< Number of deadline misses */
+    uint64_t last_start_time;      /**< Last execution start time */
+    uint64_t last_completion_time; /**< Last execution completion time */
+    void (*deadline_miss_handler)(uint32_t task_id); /**< Optional handler for deadline misses */
+} deadline_info_t;
+
+/**
  * @enum task_state_t
  * @brief Task states in the scheduler lifecycle
  * 
@@ -119,7 +148,7 @@ typedef void (*task_func_t)(void *params);
 
 /**
  * @struct task_control_block_t
- * @brief Task Control Block (TCB)
+ * @brief Task Control Block (TCB) with TrustZone support
  * 
  * Contains all information needed to manage a task including
  * its context, state, scheduling parameters, and statistics.
@@ -139,6 +168,12 @@ typedef struct {
     uint32_t run_count;               /**< Number of times task has run */
     uint64_t total_runtime;           /**< Total execution time in microseconds */
     uint64_t last_run_time;           /**< Timestamp of last execution */
+    bool mpu_enabled;                 /**< Whether MPU protection is enabled */
+    bool is_secure;                   /**< Whether task runs in secure state */
+    uint32_t fault_count;             /**< Number of MPU/secure faults */
+    char fault_reason[32];            /**< Last fault reason */
+    deadline_info_t deadline;         /**< Deadline information */
+    bool deadline_overrun;            /**< Flag indicating deadline overrun */
 } task_control_block_t;
 
 /**
@@ -388,6 +423,60 @@ void scheduler_enable_tracing(bool enable);
  * @endcode
  */
 void scheduler_run_pending_tasks(void);
+
+/**
+ * @brief Get the current task for a specific core
+ * 
+ * @param core Core number (0 or 1)
+ * @return Pointer to current task, or NULL if no task running
+ */
+task_control_block_t* scheduler_get_current_task_ptr(uint8_t core);
+
+/**
+ * @brief Set the current task for a specific core
+ * 
+ * @param core Core number (0 or 1)
+ * @param task Pointer to task to set as current
+ * @return true if successful, false otherwise
+ */
+bool scheduler_set_current_task_ptr(uint8_t core, task_control_block_t* task);
+
+// Add to scheduler.h in the API Functions section
+
+/**
+ * @brief Set deadline parameters for a task
+ * 
+ * @param task_id Task ID to configure
+ * @param type Deadline type (none, soft, hard)
+ * @param period_ms Task period in milliseconds
+ * @param deadline_ms Deadline relative to period start (ms)
+ * @param execution_budget_us Maximum execution time budget (us)
+ * @return true if successful, false otherwise
+ */
+bool scheduler_set_deadline(int task_id, deadline_type_t type, 
+    uint32_t period_ms, uint32_t deadline_ms,
+    uint32_t execution_budget_us);
+
+/**
+* @brief Register a deadline miss handler for a task
+* 
+* This function is called when a task misses its deadline.
+* 
+* @param task_id Task ID to configure
+* @param handler Function to call on deadline miss
+* @return true if successful, false otherwise
+*/
+bool scheduler_set_deadline_miss_handler(int task_id, 
+                 void (*handler)(uint32_t task_id));
+
+/**
+* @brief Get deadline statistics for a task
+* 
+* @param task_id Task ID to query
+* @param info Pointer to deadline_info_t to fill
+* @return true if successful, false otherwise
+*/
+bool scheduler_get_deadline_info(int task_id, deadline_info_t *info);
 
 /** @} */ //end of scheduler_api group
 

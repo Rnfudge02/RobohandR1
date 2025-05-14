@@ -10,8 +10,12 @@
 #include "hardware/i2c.h"
 #include "hardware/dma.h"
 #include "hardware/irq.h"
+#include "hardware/sync.h"
+
+#include <limits.h>
 #include <string.h>
 #include <stdlib.h>
+
 
 // Global context for DMA ISR
 static i2c_driver_ctx_t* g_i2c_dma_ctx = NULL;
@@ -107,43 +111,92 @@ void i2c_driver_get_default_config(i2c_driver_config_t* config) {
     config->dma_rx_channel = -1; // Auto-allocate
 }
 
+/**
+ * @brief Thread-safe I2C read operation
+ */
 bool i2c_driver_read_bytes(i2c_driver_ctx_t* ctx, uint8_t dev_addr, 
-                          uint8_t reg_addr, uint8_t* data, size_t len) {
+    uint8_t reg_addr, uint8_t* data, size_t len) {
     if (ctx == NULL || !ctx->initialized || data == NULL || len == 0) {
         return false;
     }
-    
+
+    // Use a static spinlock for I2C bus access
+    // This ensures that only one core can access the I2C hardware at a time
+    static uint i2c_lock_num = UINT_MAX;
+    static spin_lock_t* i2c_lock = NULL;
+
+    // One-time initialization of the spinlock
+    if (i2c_lock_num == UINT_MAX) {
+        i2c_lock_num = spin_lock_claim_unused(true);
+        if (i2c_lock_num == UINT_MAX) {
+            return false;
+        }
+    i2c_lock = spin_lock_instance(i2c_lock_num);
+    }
+
+    // Acquire lock
+    uint32_t save = spin_lock_blocking(i2c_lock);
+
     // Set up I2C transfer for register address
     int result = i2c_write_blocking(ctx->i2c_inst, dev_addr, &reg_addr, 1, true);
-    if (result != 1) {
-        return false;
+    bool success = false;
+
+    if (result == 1) {
+        // Read data from the register
+        result = i2c_read_blocking(ctx->i2c_inst, dev_addr, data, len, false);
+        success = (result == len);
     }
-    
-    // Read data from the register
-    result = i2c_read_blocking(ctx->i2c_inst, dev_addr, data, len, false);
-    return (result == len);
+
+    // Release lock
+    spin_unlock(i2c_lock, save);
+
+    return success;
 }
 
+/**
+ * @brief Thread-safe I2C write operation
+ */
 bool i2c_driver_write_bytes(i2c_driver_ctx_t* ctx, uint8_t dev_addr,
-                           uint8_t reg_addr, const uint8_t* data, size_t len) {
+    uint8_t reg_addr, const uint8_t* data, size_t len) {
     if (ctx == NULL || !ctx->initialized || data == NULL || len == 0) {
         return false;
     }
-    
+
+    // Use a static spinlock for I2C bus access
+    static uint i2c_lock_num = UINT_MAX;
+    static spin_lock_t* i2c_lock = NULL;
+
+    // One-time initialization of the spinlock
+    if (i2c_lock_num == UINT_MAX) {
+        i2c_lock_num = spin_lock_claim_unused(true);
+        if (i2c_lock_num == UINT_MAX) {
+            return false;
+        }
+        i2c_lock = spin_lock_instance(i2c_lock_num);
+    }
+
+    // Acquire lock
+    uint32_t save = spin_lock_blocking(i2c_lock);
+
     // Prepare buffer: [register address, data...]
     uint8_t* buffer = (uint8_t*)malloc(len + 1);
-    if (buffer == NULL) {
-        return false;
+    bool success = false;
+
+    if (buffer != NULL) {
+        buffer[0] = reg_addr;
+        memcpy(buffer + 1, data, len);
+
+        // Write to device
+        int result = i2c_write_blocking(ctx->i2c_inst, dev_addr, buffer, len + 1, false);
+        success = (result == len + 1);
+
+        free(buffer);
     }
-    
-    buffer[0] = reg_addr;
-    memcpy(buffer + 1, data, len);
-    
-    // Write to device
-    int result = i2c_write_blocking(ctx->i2c_inst, dev_addr, buffer, len + 1, false);
-    free(buffer);
-    
-    return (result == len + 1);
+
+    // Release lock
+    spin_unlock(i2c_lock, save);
+
+    return success;
 }
 
 bool i2c_driver_read_bytes_dma(i2c_driver_ctx_t* ctx, uint8_t dev_addr,

@@ -235,7 +235,7 @@ check_ninja() {
 
 # Function to generate AI prompt template
 generate_prompt_template() {
-    local prompt_file="prompt_file.txt"
+    local prompt_file="./Outputs/prompt_file.txt"
     local request=""
     local include_core=0
     local include_drivers=0
@@ -297,7 +297,8 @@ generate_prompt_template() {
     # Add specific file content
     echo -e "\n=== CODE CONTENT ===" >> $prompt_file
     if [ $include_core -eq 1 ]; then
-        for FILE in ./Include/Core/* ./Src/Core/*; do
+        # Use find to recursively get all files in Core subdirectories
+        for FILE in $(find ./Include/Core ./Src/Core -type f | sort); do
             if [ -f "$FILE" ]; then
                 echo -e "\n// File: $FILE" >> $prompt_file
                 cat $FILE >> $prompt_file
@@ -346,7 +347,7 @@ build_project() {
     # Configure and build with Ninja
     if [ "$verbose" == "verbose" ]; then
         log_message "INFO" "Using verbose build mode"
-        cmake .. -G Ninja -DCMAKE_VERBOSE_MAKEFILE=ON
+        cmake .. -G Ninja -DCMAKE_VERBOSE_MAKEFILE=ON -DCMAKE_COMPILE_COMMANDS=ON
     else
         cmake .. -G Ninja
     fi
@@ -372,182 +373,326 @@ build_project() {
     return 0
 }
 
-# Function to analyze memory usage
+# Function to analyze memory usage for Raspberry Pi Pico
+#!/bin/bash
+
+# Memory Analysis Script for RP2350/Pi Pico Project
+#!/bin/bash
+
+# Memory Analysis Script for RP2350/Pi Pico Project
 analyze_memory() {
-    # First check if ARM tools are available
-    check_arm_compiler || return 1
+    # Define colors for output
+    FG_GREEN="\033[32m"
+    FG_YELLOW="\033[33m"
+    FG_RED="\033[31m"
+    FG_CYAN="\033[36m"
+    FG_BLUE="\033[34m"
+    BOLD="\033[1m"
+    RESET="\033[0m"
     
+    # Define memory sizes for RP2350
+    local FLASH_TOTAL=2097152  # 2MB
+    local RAM_TOTAL=524288     # 512KB
+    local SCRATCH_X_TOTAL=4096 # 4KB
+    local SCRATCH_Y_TOTAL=4096 # 4KB
+    
+    # Define ARM toolchain prefix
+    PREFIX=${ARM_PREFIX:-arm-none-eabi-}
+    
+    # Check if ELF file exists
     if [ ! -f "$ELF_FILE" ]; then
-        log_message "ERROR" "ELF file not found: $ELF_FILE"
-        log_message "INFO" "Build the project first with './$SCRIPT_NAME -b'"
+        echo -e "${FG_RED}ERROR: ELF file not found: $ELF_FILE${RESET}"
+        echo -e "${FG_CYAN}Build the project first with 'cmake --build .'${RESET}"
         return 1
     fi
-
-    print_banner "MEMORY ANALYSIS FOR RP2350 PROJECT"
-
+    
+    # Check for map file
+    MAP_FILE="${ELF_FILE%.*}.map"
+    
+    print_header() {
+        echo -e "\n${FG_CYAN}${BOLD}$1${RESET}"
+        echo -e "${FG_CYAN}$(printf '=%.0s' $(seq 1 ${#1}))${RESET}"
+    }
+    
+    echo -e "\n${BOLD}${FG_CYAN}RP2350 MEMORY ANALYSIS${RESET}"
+    echo -e "${FG_CYAN}=======================${RESET}"
+    
     # Basic size information
-    echo -e "\n${FG_CYAN}${BOLD}1. BASIC MEMORY USAGE${RESET}"
+    print_header "1. BASIC MEMORY USAGE"
     ${PREFIX}size --format=berkeley "$ELF_FILE"
 
-    # Detailed section sizes
-    echo -e "\n${FG_CYAN}${BOLD}2. DETAILED SECTION SIZES${RESET}"
-    ${PREFIX}size --format=sysv "$ELF_FILE"
-
-    # Extract memory usage using size
+    # Extract standard memory usage metrics
     local TEXT_SIZE=$(${PREFIX}size --format=berkeley "$ELF_FILE" | grep -A1 "text" | tail -n1 | awk '{print $1}')
     local DATA_SIZE=$(${PREFIX}size --format=berkeley "$ELF_FILE" | grep -A1 "text" | tail -n1 | awk '{print $2}')
     local BSS_SIZE=$(${PREFIX}size --format=berkeley "$ELF_FILE" | grep -A1 "text" | tail -n1 | awk '{print $3}')
-
-    # Calculate total RAM and FLASH usage
+    
+    # Calculate totals
     local FLASH_USED=$TEXT_SIZE
     local RAM_USED=$((DATA_SIZE + BSS_SIZE))
-
-    # Use bc if available, otherwise use basic math
-    if command -v bc &> /dev/null; then
-        local FLASH_PERCENT=$(echo "scale=2; ($FLASH_USED * 100) / $FLASH_TOTAL" | bc)
-        local RAM_PERCENT=$(echo "scale=2; ($RAM_USED * 100) / $RAM_TOTAL" | bc)
-    else
-        local FLASH_PERCENT=$(( $FLASH_USED * 100 / $FLASH_TOTAL ))
-        local RAM_PERCENT=$(( $RAM_USED * 100 / $RAM_TOTAL ))
-    fi
-
-    echo -e "\n${FG_CYAN}${BOLD}3. MEMORY USAGE SUMMARY${RESET}"
+    
+    # Display percentage usage
+    local FLASH_PERCENT=$(echo "scale=2; ($FLASH_USED * 100) / $FLASH_TOTAL" | bc)
+    local RAM_PERCENT=$(echo "scale=2; ($RAM_USED * 100) / $RAM_TOTAL" | bc)
+    
+    # Detailed section sizes - more compatible approach
+    print_header "2. DETAILED SECTION SIZES"
+    echo -e "${FG_CYAN}Section           Size (bytes)   Address      Description${RESET}"
+    echo -e "${FG_CYAN}---------------   ------------   ---------    ---------------------------${RESET}"
+    ${PREFIX}size --format=sysv "$ELF_FILE" | sort -k2,2nr | head -20 | awk '{printf "%-17s %-14s %-13s %s\n", $1, $2, $3, "Section"}'
+    
+    # Program headers showing memory regions
+    print_header "3. MEMORY REGIONS"
+    echo -e "${FG_CYAN}Region Information:${RESET}"
+    ${PREFIX}readelf -l "$ELF_FILE" | grep -A20 "Program Headers"
+    
+    print_header "4. MEMORY USAGE SUMMARY"
     echo -e "Flash usage: ${FG_GREEN}$FLASH_USED / $FLASH_TOTAL bytes (${FLASH_PERCENT}%)${RESET}"
-    echo -e "RAM usage: ${FG_GREEN}$RAM_USED / $RAM_TOTAL bytes (${RAM_PERCENT}%)${RESET}"
-
-    # RAM functions analysis
-    echo -e "\n${FG_CYAN}${BOLD}4. RAM FUNCTIONS ANALYSIS${RESET}"
-    echo -e "Sections placed in RAM:"
-    ${PREFIX}readelf -S "$ELF_FILE" | grep -E "\.data\.ram_func|\.text\.ram_func" || echo "No RAM function sections found"
-
-    # Extract RAM functions specifically
-    echo -e "\nFunctions explicitly placed in RAM:"
-    ${PREFIX}nm --print-size --size-sort --radix=d "$ELF_FILE" | grep -E "\.data\.ram_func|\.text\.ram_func" | sort -nr -k2 || echo "No RAM functions found"
-
-    # Calculate total RAM functions size
-    local RAM_FUNC_SIZE=$(${PREFIX}size --format=sysv "$ELF_FILE" | grep -E "\.data\.ram_func|\.text\.ram_func" | awk '{sum += $2} END {print sum}')
-    if [ -z "$RAM_FUNC_SIZE" ]; then
-        RAM_FUNC_SIZE=0
-    fi
-
-    echo -e "Total RAM functions size: ${FG_GREEN}$RAM_FUNC_SIZE bytes${RESET}"
+    echo -e "RAM usage:   ${FG_GREEN}$RAM_USED / $RAM_TOTAL bytes (${RAM_PERCENT}%)${RESET}"
     
-    # Calculate percentage if bc is available
-    if command -v bc &> /dev/null; then
-        local RAM_FUNC_PERCENT=$(echo "scale=2; ($RAM_FUNC_SIZE * 100) / $RAM_TOTAL" | bc)
-        echo -e "Percentage of RAM used for functions: ${FG_GREEN}${RAM_FUNC_PERCENT}%${RESET}"
+    # RAM sections analysis
+    print_header "5. RAM CRITICAL CODE SECTIONS"
+    echo -e "${FG_CYAN}Sections with time critical code in RAM:${RESET}"
+    echo -e "${FG_CYAN}Section Name        Address Range    Size       Flags${RESET}"
+    echo -e "${FG_CYAN}------------------  --------------   --------   -----${RESET}"
+    ${PREFIX}readelf -S "$ELF_FILE" | grep -i -E "time_critical|\.ram\." || echo "No time critical code sections found"
+    
+    # Analyze time critical functions - look specifically for address ranges in RAM
+    echo -e "\n${FG_CYAN}Functions in time critical section:${RESET}"
+    echo -e "${FG_CYAN}Address       Size       Type    Function${RESET}"
+    echo -e "${FG_CYAN}------------  ---------  ------  ---------------------------${RESET}"
+    # First check if any functions have addresses in RAM region (0x20000000-0x2007FFFF)
+    ram_funcs=$(${PREFIX}nm --print-size --numeric-sort "$ELF_FILE" | grep -E "^20[0-9a-f]{6}")
+    if [ -n "$ram_funcs" ]; then
+        echo "$ram_funcs" | head -15 | awk '{printf "0x%-10s %-10s %-7s %s\n", $1, $2, $3, $4}'
     else
-        local RAM_FUNC_PERCENT=$(( $RAM_FUNC_SIZE * 100 / $RAM_TOTAL ))
-        echo -e "Percentage of RAM used for functions: ${FG_GREEN}${RAM_FUNC_PERCENT}%${RESET}"
+        echo "No functions found in RAM address range (0x20000000-0x2007FFFF)"
     fi
-
+    
+    # Look for functions with .time_critical attribute
+    echo -e "\n${FG_CYAN}Functions with time_critical attribute:${RESET}"
+    echo -e "${FG_CYAN}Address       Size       Type    Function${RESET}"
+    echo -e "${FG_CYAN}------------  ---------  ------  ---------------------------${RESET}"
+    ${PREFIX}nm --print-size --size-sort --radix=d "$ELF_FILE" | grep -i " t " | tail -15 | awk '{printf "%-12s %-10s %-7s %s\n", $1, $2, $3, $4}'
+    
+    # Check the 10 largest functions to see if they're in RAM or FLASH
+    echo -e "\n${FG_CYAN}Largest function memory placement:${RESET}"
+    echo -e "${FG_CYAN}Address       Size       Type    Function             Memory${RESET}"
+    echo -e "${FG_CYAN}------------  ---------  ------  ------------------   ------${RESET}"
+    largest_funcs=$(${PREFIX}nm --print-size --size-sort --radix=d "$ELF_FILE" | grep -E " [Tt] " | tail -10)
+    if [ -n "$largest_funcs" ]; then
+        echo "$largest_funcs" | while read line; do
+            addr=$(echo $line | awk '{print $1}')
+            size=$(echo $line | awk '{print $2}')
+            type=$(echo $line | awk '{print $3}')
+            func=$(echo $line | awk '{print $4}')
+            
+            # Check if address is in RAM range (decimal comparison)
+            if [[ $addr -ge 536870912 && $addr -lt 545259520 ]]; then
+                region="RAM"
+            else
+                region="FLASH"
+            fi
+            printf "%-12s %-10s %-7s %-20.20s %s\n" "$addr" "$size" "$type" "$func" "$region"
+        done
+    fi
+    
+    # Special sections for the RP2350
+    print_header "6. RP2350 SPECIAL SECTIONS"
+    echo -e "${FG_CYAN}Boot2 section (must be <= 256 bytes):${RESET}"
+    echo -e "${FG_CYAN}Section Name        Address Range    Size       Flags${RESET}"
+    echo -e "${FG_CYAN}------------------  --------------   --------   -----${RESET}"
+    ${PREFIX}readelf -S "$ELF_FILE" | grep -E '\.boot2' || echo "No boot2 section found"
+    
+    echo -e "\n${FG_CYAN}TrustZone secure sections:${RESET}"
+    echo -e "${FG_CYAN}Section Name        Address Range    Size       Flags${RESET}"
+    echo -e "${FG_CYAN}------------------  --------------   --------   -----${RESET}"
+    ${PREFIX}readelf -S "$ELF_FILE" | grep -E 'TZ|secure|NSC' || echo "No TrustZone sections found"
+    
     # Find largest symbols
-    echo -e "\n${FG_CYAN}${BOLD}5. TOP 20 LARGEST SYMBOLS${RESET}"
-    ${PREFIX}nm --print-size --size-sort --radix=d "$ELF_FILE" | grep -v " 0 " | tail -n 20 || echo "No symbols found"
-
-    # Memory map
-    if [ -f "$MAP_FILE" ]; then
-        echo -e "\n${FG_CYAN}${BOLD}6. MEMORY MAP${RESET}"
-        echo -e "Complete memory map available at: $MAP_FILE"
-        ${PREFIX}readelf -e "$ELF_FILE" | grep -A15 "Program Headers" || echo "No program headers found"
-    fi
-
-    echo -e "\n${FG_CYAN}${BOLD}7. COMPILATION INFORMATION${RESET}"
-    local COMPILER_VERSION=$(${PREFIX}gcc --version | head -n1)
-    echo -e "Compiler: $COMPILER_VERSION"
-
-    # Check if file was compiled with optimization
-    local OPTIMIZE_INFO=$(${PREFIX}readelf -p .comment "$ELF_FILE" | grep -o "\-O[0-3s]" || echo "Unknown")
-    echo -e "Optimization: $OPTIMIZE_INFO"
-
-    print_banner "MEMORY USAGE ANALYSIS"
-
-    # Human-readable size conversion
-    human_readable() {
-        echo $1 | awk '
-            function human(x) {
-                if (x < 1000) return x "B"
-                x /= 1024
-                if (x < 1000) return sprintf("%.1fKB", x)
-                x /= 1024
-                if (x < 1000) return sprintf("%.1fMB", x)
-                x /= 1024
-                return sprintf("%.1fGB", x)
-            }
-            {print human($1)}'
-    }
-
-    # Basic memory usage with human-readable sizes
-    echo -e "\n${FG_CYAN}${BOLD}MEMORY SUMMARY${RESET}"
-    local MEM_INFO=$(${PREFIX}size --format=berkeley "$ELF_FILE" | tail -1)
-    local TEXT_SIZE=$(echo "$MEM_INFO" | awk '{print $1}')
-    local DATA_SIZE=$(echo "$MEM_INFO" | awk '{print $2}')
-    local BSS_SIZE=$(echo "$MEM_INFO" | awk '{print $3}')
-    
-    echo -e "Program Size (Flash): ${FG_GREEN}$(human_readable $TEXT_SIZE)${RESET} (Code + Constants)"
-    echo -e "  Initialized Data: ${FG_GREEN}$(human_readable $DATA_SIZE)${RESET} (Global variables)"
-    echo -e "  Zeroed Data: ${FG_GREEN}$(human_readable $BSS_SIZE)${RESET} (Uninitialized variables)"
-    
-    local TOTAL_RAM=$((DATA_SIZE + BSS_SIZE))
-    local RAM_PERCENT=$(echo "scale=2; ($TOTAL_RAM * 100) / $RAM_TOTAL" | bc)
-    echo -e "\nTotal RAM Usage: ${FG_YELLOW}$(human_readable $TOTAL_RAM)${RESET} / ${FG_CYAN}$(human_readable $RAM_TOTAL)${RESET} (${FG_GREEN}${RAM_PERCENT}%${RESET})"
-
-    # Flash usage breakdown
-    echo -e "\n${FG_CYAN}${BOLD}FLASH MEMORY BREAKDOWN${RESET}"
-    ${PREFIX}size --format=sysv "$ELF_FILE" | awk '
-    /^\.text/ || /^\.rodata/ || /^\.data/ {
-        sum += $2
-        printf "%-20s %10s (%.1f%% of Flash)\n", $1, $2, ($2/'$FLASH_TOTAL')*100
-    }
-    END {
-        printf "%-20s %10s (%.1f%% of Flash)\n", "TOTAL", sum, (sum/'$FLASH_TOTAL')*100
-    }'
-
-    # Top memory consumers with proper headers
-    echo -e "\n${FG_CYAN}${BOLD}TOP MEMORY USERS${RESET}"
-    ${PREFIX}nm --print-size --size-sort --radix=d "$ELF_FILE" | \
-    grep -v " 0 " | \
-    awk '{
-        # Extract relevant fields
+    print_header "7. TOP 20 LARGEST SYMBOLS"
+    echo -e "${FG_CYAN}Type Size (bytes)  Human Size   Symbol Name${RESET}"
+    echo -e "${FG_CYAN}---- ------------  -----------  ------------------------------${RESET}"
+    ${PREFIX}nm --print-size --size-sort --radix=d "$ELF_FILE" | grep -v " 0 " | tail -n 20 | awk '
+    {
         addr = $1;
         size = $2;
         type = $3;
         symbol = $4;
         for (i=5; i<=NF; i++) symbol = symbol " " $i;
-        printf("%s|%d|%s\n", type, size, symbol);
-    }' | \
-    sort -t'|' -k2,2nr | \
-    head -n 20 | \
-    awk -F'|' '
-    BEGIN {
-        printf "%-4s %-12s %-12s %s\n", "Type", "Size(bytes)", "Human", "Symbol Name"
-        printf "%-4s %-12s %-12s %s\n", "----", "-----------", "-----", "-----------"
-    }
-    {
-        type = $1
-        size = $2
-        symbol = $3
         
-        if (size > 1024*1024) {
-            human = sprintf("%.1fMB", size/1024/1024)
-        } else if (size > 1024) {
-            human = sprintf("%.1fKB", size/1024)
-        } else {
-            human = sprintf("%dB", size)
-        }
+        # Format size to human readable
+        if (size > 1024*1024)
+            human = sprintf("%.1fMB", size/1024/1024);
+        else if (size > 1024)
+            human = sprintf("%.1fKB", size/1024);
+        else
+            human = sprintf("%dB", size);
         
-        printf "%-4s %-12d %-12s %s\n", type, size, human, symbol
-    }'
-
-    # Compilation information with better optimization detection
-    echo -e "\n${FG_CYAN}${BOLD}COMPILATION INFORMATION${RESET}"
-    local COMPILER_VERSION=$(${PREFIX}gcc --version | head -n1)
-    local OPTIMIZE_INFO=$(${PREFIX}readelf -p .comment "$ELF_FILE" | grep -m1 -o "\-O[0-9a-z]*" || echo "Unknown")
+        printf "%-4s %-12d %-12s %-30.30s\n", type, size, human, symbol;
+    }' || echo "No symbols found"
     
-    echo -e "Compiler: ${FG_GREEN}$COMPILER_VERSION${RESET}"
-    echo -e "Optimization: ${FG_GREEN}${OPTIMIZE_INFO#-O}${RESET}"
-    echo -e "Float ABI: ${FG_GREEN}hard${RESET}"
-    echo -e "Core Features: ${FG_GREEN}Cortex-M33 + FPU + DSP${RESET}"
+    # Core components analysis
+    print_header "8. MODULE SIZE ANALYSIS"
+    echo -e "${FG_CYAN}Module Name       Size          Functions   Description${RESET}"
+    echo -e "${FG_CYAN}---------------   -----------   ---------   ---------------------------------${RESET}"
+    
+    # Check for specific modules in your project - more robust calculation
+    modules=("scheduler" "log" "sensor" "shell" "stats" "mpu_tz")
+    descriptions=(
+        "Task scheduler and context switching"
+        "Logging system for debug/info output"
+        "Sensor management and data processing"
+        "Command line interface over USB"
+        "Performance statistics collection"
+        "Memory protection and TrustZone"
+    )
+    
+    for i in "${!modules[@]}"; do
+        module="${modules[$i]}"
+        description="${descriptions[$i]}"
+        
+        # Count the module functions
+        function_count=$(${PREFIX}nm "$ELF_FILE" | grep -i "$module" | wc -l)
+        if [ $function_count -gt 0 ]; then
+            # Get sizes using manual calculation to avoid decimal conversion issues
+            module_size=0
+            module_info=$(${PREFIX}nm --print-size "$ELF_FILE" | grep -i "$module" | grep -v " 0 ")
+            if [ -n "$module_info" ]; then
+                while read -r line; do
+                    size=$(echo "$line" | awk '{print $2}')
+                    if [[ "$size" =~ ^[0-9]+$ ]]; then
+                        module_size=$((module_size + size))
+                    fi
+                done <<< "$module_info"
+            fi
+            
+            if [ $module_size -gt 0 ]; then
+                if [ $module_size -gt 1024 ]; then
+                    kb_size=$(echo "scale=1; $module_size/1024" | bc)
+                    printf "%-17s ${FG_YELLOW}%-13s${RESET} %-11s %s\n" "$module" "${kb_size}KB" "$function_count" "$description"
+                else
+                    printf "%-17s ${FG_GREEN}%-13s${RESET} %-11s %s\n" "$module" "${module_size}B" "$function_count" "$description"
+                fi
+            fi
+        fi
+    done
+    
+    # Memory Map overview (if map file exists)
+    if [ -f "$MAP_FILE" ]; then
+        print_header "9. MEMORY MAP HIGHLIGHTS"
+        echo -e "${FG_CYAN}Key sections from memory map:${RESET}"
+        echo -e "${FG_CYAN}Memory Region     Start Address    End Address      Size${RESET}"
+        echo -e "${FG_CYAN}---------------   --------------   --------------   ----------${RESET}"
+        grep -A5 "^Memory Configuration" "$MAP_FILE" | grep -v "^Memory Configuration" || echo "Memory configuration not found in map file"
+        
+        echo -e "\n${FG_CYAN}Total Memory Map available at: ${MAP_FILE}${RESET}"
+    fi
+    
+    # Optimization and features check
+    print_header "10. COMPILATION INFORMATION"
+    
+    # Check if file was compiled with optimization
+    local OPTIMIZE_INFO=$(${PREFIX}readelf -p .comment "$ELF_FILE" | grep -o "\-O[0-3s]" || echo "Unknown")
+    echo -e "Optimization: ${FG_GREEN}${OPTIMIZE_INFO}${RESET}"
+    echo -e "Note: The code also uses __attribute__((section(\".time_critical\"))) for time-critical functions"
+    
+    # Check for time_critical sections
+    echo -e "\n${FG_CYAN}Feature Detection:${RESET}"
+    echo -e "${FG_CYAN}Feature               Count       Status${RESET}"
+    echo -e "${FG_CYAN}--------------------  ----------  --------------${RESET}"
+    
+    # Time critical code detection
+    time_critical_count=$(${PREFIX}nm "$ELF_FILE" | grep -i "time_critical" | wc -l)
+    if [ $time_critical_count -gt 0 ]; then
+        printf "%-22s %-12s ${FG_GREEN}%s${RESET}\n" "Time Critical Code" "$time_critical_count" "Detected"
+    else
+        printf "%-22s %-12s ${FG_YELLOW}%s${RESET}\n" "Time Critical Code" "0" "Not found"
+    fi
+    
+    # Check for functions in RAM
+    ram_functions_count=$(${PREFIX}nm --numeric-sort "$ELF_FILE" | grep -E "^20[0-9a-f]{6}" | wc -l)
+    if [ $ram_functions_count -gt 0 ]; then
+        printf "%-22s %-12s ${FG_GREEN}%s${RESET}\n" "Functions in RAM" "$ram_functions_count" "Detected"
+    else
+        printf "%-22s %-12s ${FG_YELLOW}%s${RESET}\n" "Functions in RAM" "0" "Not detected"
+    fi
+    
+    # Check other key features
+    features=("scheduler" "multicore" "TrustZone" "MPU" "FPU" "DMA" "USB")
+    for feature in "${features[@]}"; do
+        feature_count=$(${PREFIX}nm "$ELF_FILE" | grep -i "$feature" | wc -l)
+        if [ $feature_count -gt 0 ]; then
+            printf "%-22s %-12s ${FG_GREEN}%s${RESET}\n" "$feature" "$feature_count" "Enabled"
+        else
+            printf "%-22s %-12s ${FG_YELLOW}%s${RESET}\n" "$feature" "0" "Not detected"
+        fi
+    done
+    
+    # Human-readable size conversion function
+    human_readable() {
+        size=$1
+        if [ $size -gt 1048576 ]; then
+            echo "$(echo "scale=1; $size/1048576" | bc)MB"
+        elif [ $size -gt 1024 ]; then
+            echo "$(echo "scale=1; $size/1024" | bc)KB"
+        else
+            echo "${size}B"
+        fi
+    }
+    
+    # Memory summary with color alerts
+    print_header "11. MEMORY USAGE EVALUATION"
+    echo -e "${FG_CYAN}Memory Type    Used             Total            Percentage   Status${RESET}"
+    echo -e "${FG_CYAN}------------   --------------   --------------   ----------   ----------------${RESET}"
+    
+    # Flash usage status with color coding
+    flash_human=$(human_readable $FLASH_USED)
+    flash_total_human=$(human_readable $FLASH_TOTAL)
+    if (( $(echo "$FLASH_PERCENT < 75" | bc -l) )); then
+        printf "%-14s %-16s %-16s %-12s ${FG_GREEN}%s${RESET}\n" "Flash" "$flash_human" "$flash_total_human" "${FLASH_PERCENT}%" "Good"
+    elif (( $(echo "$FLASH_PERCENT < 90" | bc -l) )); then
+        printf "%-14s %-16s %-16s %-12s ${FG_YELLOW}%s${RESET}\n" "Flash" "$flash_human" "$flash_total_human" "${FLASH_PERCENT}%" "Getting high"
+    else
+        printf "%-14s %-16s %-16s %-12s ${FG_RED}%s${RESET}\n" "Flash" "$flash_human" "$flash_total_human" "${FLASH_PERCENT}%" "Critical!"
+    fi
+    
+    # RAM usage status with color coding
+    ram_human=$(human_readable $RAM_USED)
+    ram_total_human=$(human_readable $RAM_TOTAL)
+    if (( $(echo "$RAM_PERCENT < 75" | bc -l) )); then
+        printf "%-14s %-16s %-16s %-12s ${FG_GREEN}%s${RESET}\n" "RAM" "$ram_human" "$ram_total_human" "${RAM_PERCENT}%" "Good"
+    elif (( $(echo "$RAM_PERCENT < 90" | bc -l) )); then
+        printf "%-14s %-16s %-16s %-12s ${FG_YELLOW}%s${RESET}\n" "RAM" "$ram_human" "$ram_total_human" "${RAM_PERCENT}%" "Getting high"
+    else
+        printf "%-14s %-16s %-16s %-12s ${FG_RED}%s${RESET}\n" "RAM" "$ram_human" "$ram_total_human" "${RAM_PERCENT}%" "Critical!"
+    fi
+    
+    # Function placement
+    print_header "12. FUNCTION PLACEMENT RECOMMENDATIONS"
+    echo -e "${FG_CYAN}Function Name             Size (bytes)   Current Location   Recommendation${RESET}"
+    echo -e "${FG_CYAN}------------------------  ------------   ----------------   ------------------------${RESET}"
+    
+    # Look for IRQ handlers and critical functions to recommend for RAM placement
+    critical_candidates=$(${PREFIX}nm --print-size --size-sort --radix=d "$ELF_FILE" | grep -E ' T ' | grep -i -E 'handler|irq|isr|interrupt|schedule|task|time|tick|timer|callback' | tail -10)
+    if [ -n "$critical_candidates" ]; then
+        # For each candidate, check if it's already in RAM
+        echo "$critical_candidates" | while read line; do
+            addr=$(echo $line | awk '{print $1}')
+            size=$(echo $line | awk '{print $2}')
+            name=$(echo $line | awk '{print $4}')
+            
+            # Check if address is in RAM range - decimal check not reliable, use hex
+            if [[ "$addr" =~ ^20 ]]; then
+                printf "%-26s %-14s %-18s ${FG_GREEN}%s${RESET}\n" "$name" "$size" "RAM" "Already optimized"
+            else
+                printf "%-26s %-14s %-18s ${FG_YELLOW}%s${RESET}\n" "$name" "$size" "FLASH" "Move to RAM with .time_critical"
+            fi
+        done
+    else
+        echo "No specific recommendations found"
+    fi
+    
+    echo -e "\n${FG_CYAN}${BOLD}MEMORY ANALYSIS COMPLETE${RESET}"
 }
 
 # Function to generate documentation
@@ -564,8 +709,8 @@ generate_documentation() {
     mkdir -p $DOCS_DIR
 
     # Create doxyfile if it doesn't exist
-    if [ ! -f "./Robohand.doxyfile" ]; then
-        doxygen -g Robohand.doxyfile
+    if [ ! -f "$DOCS_DIR/Robohand.doxyfile" ]; then
+        doxygen -g $DOCS_DIR/Robohand.doxyfile
     
         # Update doxyfile with project settings
         sed -i 's/PROJECT_NAME           = "My Project"/PROJECT_NAME           = "RobohandR1"/' Robohand.doxyfile
@@ -584,8 +729,11 @@ generate_documentation() {
         sed -i 's/RECURSIVE              = NO/RECURSIVE              = YES/' Robohand.doxyfile
     fi
 
+    mkdir -p $DOCS_DIR/Doxygen
+    cd $DOCS_DIR/Doxygen
+
     # Generate documentation
-    if doxygen Robohand.doxyfile; then
+    if doxygen ../Robohand.doxyfile; then
         log_message "SUCCESS" "Documentation generated in $DOCS_DIR"
         log_message "INFO" "Open $DOCS_DIR/html/index.html in your browser to view"
     else

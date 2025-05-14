@@ -66,7 +66,7 @@ void test_task(void *params) {
  * @brief Get next ready task for a core
  * @note This function should be placed in RAM
  */
-__attribute__((section(".data.ram_func")))
+__attribute__((section(".time_critical")))
 task_control_block_t* scheduler_get_next_task(uint8_t core) {
     static uint8_t last_scheduled_index[2] = {0, 0};
     task_control_block_t *next_task = NULL;
@@ -112,7 +112,7 @@ task_control_block_t* scheduler_get_next_task(uint8_t core) {
  * @brief Run a task
  * @note This function should be placed in RAM
  */
-__attribute__((section(".data.ram_func")))
+__attribute__((section(".time_critical")))
 static void run_task(task_control_block_t *task) {
     if (task && task->function) {
         task->state = TASK_STATE_RUNNING;
@@ -145,7 +145,7 @@ static void run_task(task_control_block_t *task) {
  * @return true to continue timer, false to stop
  * @note This function should be placed in RAM
  */
-__attribute__((section(".data.ram_func")))
+__attribute__((section(".time_critical")))
 static bool scheduler_timer_callback(struct repeating_timer *t) {
     static uint64_t tick_count = 0;
     (void)t;
@@ -197,19 +197,14 @@ static bool scheduler_timer_callback(struct repeating_timer *t) {
 /**
  * @brief Core 1 entry point
  */
-__attribute__((section(".data.ram_func")))
+__attribute__((section(".time_critical")))
 void scheduler_core1_entry(void) {
     core_sync.core1_started = true;
     
     printf("Core 1 started\n");
     
     while (1) {
-        if (core_sync.scheduler_running && current_task[1]) {
-            if (current_task[1]->state == TASK_STATE_READY) {
-                run_task(current_task[1]);
-            }
-        }
-        
+        scheduler_run_pending_tasks();
         tight_loop_contents();
     }
 }
@@ -274,7 +269,7 @@ void scheduler_stop(void) {
 /**
  * @note This function should be placed in RAM
 **/
-__attribute__((section(".data.ram_func")))
+__attribute__((section(".time_critical")))
 int scheduler_create_task(task_func_t function, void *params, uint32_t stack_size,
                          task_priority_t priority, const char *name, uint8_t core_affinity, task_type_t task_type) {
     if (!function || (core_affinity > 1 && core_affinity != 0xFF)) {
@@ -328,7 +323,7 @@ int scheduler_create_task(task_func_t function, void *params, uint32_t stack_siz
 /**
  * @note This function should be placed in RAM
 **/
-__attribute__((section(".data.ram_func")))
+__attribute__((section(".time_critical")))
 void scheduler_yield(void) {
     //Force a reschedule on next timer tick
     if (current_task[get_core_num()]) {
@@ -344,7 +339,7 @@ void scheduler_delay(uint32_t ms) {
 /**
  * @note This function should be placed in RAM
 **/
-__attribute__((section(".data.ram_func")))
+__attribute__((section(".time_critical")))
 int scheduler_get_current_task(void) {
     uint8_t core = get_core_num();
     return current_task[core] ? current_task[core]->task_id : -1;
@@ -353,7 +348,7 @@ int scheduler_get_current_task(void) {
 /**
  * @note This function should be placed in RAM
 **/
-__attribute__((section(".data.ram_func")))
+__attribute__((section(".time_critical")))
 bool scheduler_get_stats(scheduler_stats_t *stats_out) {
     if (!stats_out) return false;
     
@@ -374,7 +369,7 @@ bool scheduler_get_stats(scheduler_stats_t *stats_out) {
 /**
  * @note This function should be placed in RAM
 **/
-__attribute__((section(".data.ram_func")))
+__attribute__((section(".time_critical")))
 bool scheduler_get_task_info(int task_id, task_control_block_t *tcb) {
     if (!tcb || task_id < 0) return false;
     
@@ -402,32 +397,41 @@ bool scheduler_get_task_info(int task_id, task_control_block_t *tcb) {
 /**
  * @note This function should be placed in RAM
 **/
-__attribute__((section(".data.ram_func")))
+__attribute__((section(".time_critical")))
 void scheduler_run_pending_tasks(void) {
     if (!core_sync.scheduler_running) {
         return;
     }
     
-    if (current_task[0] && current_task[0]->state == TASK_STATE_READY) {
-        task_control_block_t *task = current_task[0];
-        
-        //Mark as running
+    // First find the current task for this core
+    uint8_t core = get_core_num();
+    task_control_block_t *task = current_task[core];
+    
+    // If there's no current task or it's not in READY state, find a new task
+    if (!task || task->state != TASK_STATE_READY) {
+        task = scheduler_get_next_task(core);
+        current_task[core] = task;
+    }
+    
+    // Run the task if we have one
+    if (task && task->state == TASK_STATE_READY) {
+        // Mark as running
         task->state = TASK_STATE_RUNNING;
         task->run_count++;
         
-        //Run the task
+        // Run the task
         if (task->function) {
             task->function(task->params);
         }
         
-        //Handle based on task type
+        // Handle based on task type
         if (task->type == TASK_TYPE_PERSISTENT) {
-            //Persistent tasks go back to READY
+            // Persistent tasks go back to READY
             task->state = TASK_STATE_READY;
         } else {
-            //One-shot tasks complete
+            // One-shot tasks complete
             task->state = TASK_STATE_COMPLETED;
-            current_task[0] = NULL;
+            current_task[core] = NULL;
         }
     }
 }
@@ -436,6 +440,150 @@ __attribute__((aligned(32)))
 void scheduler_enable_tracing(bool enable) {
     tracing_enabled = enable;
     printf("Scheduler tracing %s\n", enable ? "enabled" : "disabled");
+}
+
+/**
+ * @brief Get the current task for a specific core
+ * 
+ * @param core Core number (0 or 1)
+ * @return Pointer to current task, or NULL if no task running
+ */
+task_control_block_t* scheduler_get_current_task_ptr(uint8_t core) {
+    if (core < 2) {
+        return current_task[core];
+    }
+    return NULL;
+}
+
+/**
+ * @brief Set the current task for a specific core
+ * 
+ * @param core Core number (0 or 1)
+ * @param task Pointer to task to set as current
+ * @return true if successful, false otherwise
+ */
+bool scheduler_set_current_task_ptr(uint8_t core, task_control_block_t* task) {
+    if (core < 2) {
+        current_task[core] = task;
+        return true;
+    }
+    return false;
+}
+
+// Add to scheduler.c
+
+bool scheduler_set_deadline(int task_id, deadline_type_t type, 
+                          uint32_t period_ms, uint32_t deadline_ms,
+                          uint32_t execution_budget_us) {
+    if (task_id < 0) return false;
+    
+    // Acquire lock for task list access
+    spin_lock_t *lock = spin_lock_instance(core_sync.task_list_lock_num);
+    uint32_t save = spin_lock_blocking(lock);
+    
+    // Find the task
+    task_control_block_t *task = NULL;
+    bool found = false;
+    
+    // Search both cores for the task
+    for (int core = 0; core < 2 && !found; core++) {
+        for (int i = 0; i < MAX_TASKS; i++) {
+            if (tasks[core][i].task_id == (uint32_t)task_id && 
+                tasks[core][i].state != TASK_STATE_INACTIVE) {
+                task = &tasks[core][i];
+                found = true;
+                break;
+            }
+        }
+    }
+    
+    if (!found) {
+        spin_unlock(lock, save);
+        return false;
+    }
+    
+    // Configure deadline parameters
+    task->deadline.type = type;
+    task->deadline.period_ms = period_ms;
+    task->deadline.deadline_ms = deadline_ms;
+    task->deadline.execution_budget_us = execution_budget_us;
+    task->deadline.deadline_misses = 0;
+    task->deadline.last_start_time = 0;
+    task->deadline.last_completion_time = 0;
+    task->deadline_overrun = false;
+    
+    spin_unlock(lock, save);
+    return true;
+}
+
+bool scheduler_set_deadline_miss_handler(int task_id, void (*handler)(uint32_t task_id)) {
+    if (task_id < 0) return false;
+    
+    // Acquire lock for task list access
+    spin_lock_t *lock = spin_lock_instance(core_sync.task_list_lock_num);
+    uint32_t save = spin_lock_blocking(lock);
+    
+    // Find the task
+    task_control_block_t *task = NULL;
+    bool found = false;
+    
+    // Search both cores for the task
+    for (int core = 0; core < 2 && !found; core++) {
+        for (int i = 0; i < MAX_TASKS; i++) {
+            if (tasks[core][i].task_id == (uint32_t)task_id && 
+                tasks[core][i].state != TASK_STATE_INACTIVE) {
+                task = &tasks[core][i];
+                found = true;
+                break;
+            }
+        }
+    }
+    
+    if (!found) {
+        spin_unlock(lock, save);
+        return false;
+    }
+    
+    // Set handler
+    task->deadline.deadline_miss_handler = handler;
+    
+    spin_unlock(lock, save);
+    return true;
+}
+
+bool scheduler_get_deadline_info(int task_id, deadline_info_t *info) {
+    if (task_id < 0 || !info) return false;
+    
+    // Acquire lock for task list access
+    spin_lock_t *lock = spin_lock_instance(core_sync.task_list_lock_num);
+    uint32_t save = spin_lock_blocking(lock);
+    
+    // Find the task
+    task_control_block_t *task = NULL;
+    bool found = false;
+    
+    // Search both cores for the task
+    for (int core = 0; core < 2 && !found; core++) {
+        for (int i = 0; i < MAX_TASKS; i++) {
+            if (tasks[core][i].task_id == (uint32_t)task_id && 
+                tasks[core][i].state != TASK_STATE_INACTIVE) {
+                task = &tasks[core][i];
+                found = true;
+                break;
+            }
+        }
+    }
+    
+    if (!found) {
+        spin_unlock(lock, save);
+        return false;
+    }
+    
+    // Copy deadline info
+    *info = task->deadline;
+    
+    spin_unlock(lock, save);
+    return true;
 }
 
 //Stubs for unimplemented functions

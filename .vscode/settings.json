@@ -44,6 +44,7 @@
         "stats.h": "c",
         "stats_shell_commands.h": "c",
         "hardware_stats_shell_commands.h": "c",
-        "usb_shell.h": "c"
+        "usb_shell.h": "c",
+        "functional": "c"
     }
 }

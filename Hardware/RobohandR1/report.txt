@@ -1,0 +1,291 @@
+Info: Processing symbol 'J1:Connector_USB:USB_B_OST_USB-B1HSxx_Horizontal'.
+Info: Processing symbol 'R48:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'C65:'.
+Info: Processing symbol 'R47:'.
+Info: Processing symbol 'C66:'.
+Info: Processing symbol 'R46:'.
+Info: Processing symbol 'D2:Connector_PinSocket_2.54mm:PinSocket_1x01_P2.54mm_Vertical'.
+Info: Processing symbol 'D3:Connector_PinSocket_2.54mm:PinSocket_1x01_P2.54mm_Vertical'.
+Info: Processing symbol 'R45:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'D4:Connector_PinSocket_2.54mm:PinSocket_1x01_P2.54mm_Vertical'.
+Info: Processing symbol 'R44:'.
+Info: Processing symbol 'C62:'.
+Info: Processing symbol 'R43:'.
+Info: Processing symbol 'L1:Capacitor_SMD:C_1210_3225Metric_Pad1.33x2.70mm_HandSolder'.
+Info: Processing symbol 'R42:'.
+Info: Processing symbol 'L2:Capacitor_SMD:C_1210_3225Metric_Pad1.33x2.70mm_HandSolder'.
+Info: Processing symbol 'R41:'.
+Info: Processing symbol 'L3:Capacitor_SMD:C_1210_3225Metric_Pad1.33x2.70mm_HandSolder'.
+Info: Processing symbol 'R40:'.
+Info: Processing symbol 'L4:Connector_PinSocket_2.54mm:PinSocket_1x01_P2.54mm_Vertical'.
+Info: Processing symbol 'R39:'.
+Info: Processing symbol 'C55:'.
+Info: Processing symbol 'R59:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'C49:'.
+Info: Processing symbol 'C50:'.
+Info: Processing symbol 'R58:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'C51:'.
+Info: Processing symbol 'C52:'.
+Info: Processing symbol 'C53:'.
+Info: Processing symbol 'C54:'.
+Info: Processing symbol 'R56:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'L5:'.
+Info: Processing symbol 'C56:'.
+Info: Processing symbol 'R55:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'C57:'.
+Info: Processing symbol 'C58:'.
+Info: Processing symbol 'R54:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'C59:'.
+Info: Processing symbol 'C60:'.
+Info: Processing symbol 'R53:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'C61:'.
+Info: Processing symbol 'R24:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'R8:'.
+Info: Processing symbol 'R29:Resistor_SMD:R_1206_3216Metric_Pad1.30x1.75mm_HandSolder'.
+Info: Processing symbol 'R9:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'R10:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'R28:Resistor_SMD:R_1206_3216Metric_Pad1.30x1.75mm_HandSolder'.
+Info: Processing symbol 'R11:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'R12:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'R25:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'R13:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'R14:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'R7:Connector_USB:USB_B_OST_USB-B1HSxx_Horizontal'.
+Info: Processing symbol 'R15:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'R16:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'R23:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'R17:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'R18:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'R22:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'R19:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'R20:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'R21:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'Q1:Package_DirectFET:DirectFET_SQ'.
+Info: Processing symbol 'R38:'.
+Info: Processing symbol 'L6:'.
+Info: Processing symbol 'R37:'.
+Info: Processing symbol 'L7:'.
+Info: Processing symbol 'R36:'.
+Info: Processing symbol 'L8:Inductor_SMD:L_0201_0603Metric'.
+Info: Processing symbol 'R35:'.
+Info: Processing symbol 'MT1:ICM_42670_P:XDCR_ICM-42670-P'.
+Info: Processing symbol 'R34:'.
+Info: Processing symbol 'R57:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'R33:'.
+Info: Processing symbol 'Q2:Package_TO_SOT_SMD:TO-252-2'.
+Info: Processing symbol 'R32:'.
+Info: Processing symbol 'Q3:Package_TO_SOT_SMD:TO-252-2'.
+Info: Processing symbol 'Q4:Package_TO_SOT_SMD:TO-252-2'.
+Info: Processing symbol 'R31:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'Q5:Package_TO_SOT_SMD:TO-252-2'.
+Info: Processing symbol 'R2:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'R30:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'R68:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'C26:'.
+Info: Processing symbol 'R70:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'C27:'.
+Info: Processing symbol 'C48:'.
+Info: Processing symbol 'C28:'.
+Info: Processing symbol 'R69:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'C29:'.
+Info: Processing symbol 'C30:'.
+Info: Processing symbol 'U7:W25Q16JVSSIQ:W25Q16JVSSIQ_WIN'.
+Info: Processing symbol 'C31:'.
+Info: Processing symbol 'C13:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'C32:'.
+Info: Processing symbol 'R67:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'C33:'.
+Info: Processing symbol 'C34:'.
+Info: Processing symbol 'C7:Capacitor_SMD:C_0201_0603Metric'.
+Info: Processing symbol 'C20:'.
+Info: Processing symbol 'C16:'.
+Info: Processing symbol 'C17:'.
+Info: Processing symbol 'U4:Package_TO_SOT_SMD:SOT-223-3_TabPin2'.
+Info: Processing symbol 'U5:AD7490WBCSZ:CS-32-3_ADI'.
+Info: Processing symbol 'C18:'.
+Info: Processing symbol 'C15:'.
+Info: Processing symbol 'C19:'.
+Info: Processing symbol 'U3:BMP390:10LGA_2X2X0p75_BOS-M'.
+Info: Processing symbol 'R66:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'C22:'.
+Info: Processing symbol 'U2:BMM350:BGA9_BMM350_BOS-M'.
+Info: Processing symbol 'C23:'.
+Info: Processing symbol 'C14:'.
+Info: Processing symbol 'C24:'.
+Info: Processing symbol 'U1:RP2350:RP2350B_QFN-80_EP_10.573x10.573_Pitch0.4mm'.
+Info: Processing symbol 'C25:'.
+Info: Processing symbol 'C3:Capacitor_SMD:C_01005_0402Metric'.
+Info: Processing symbol 'C5:Capacitor_SMD:C_01005_0402Metric'.
+Info: Processing symbol 'C35:'.
+Info: Processing symbol 'C42:'.
+Info: Processing symbol 'R62:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'C4:Capacitor_SMD:C_01005_0402Metric'.
+Info: Processing symbol 'C43:'.
+Info: Processing symbol 'C44:'.
+Info: Processing symbol 'R61:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'U9:LM51430XDDCR:SOT-23-THIN-6_DDC_TEX'.
+Info: Processing symbol 'C45:'.
+Info: Processing symbol 'U10:BQ25723RSNR:WQFN32_BQ25723_TEX-M'.
+Info: Processing symbol 'C46:'.
+Info: Processing symbol 'R60:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'C2:Capacitor_SMD:C_0402_1005Metric'.
+Info: Processing symbol 'C47:'.
+Info: Processing symbol 'C1:Capacitor_SMD:C_0402_1005Metric'.
+Info: Processing symbol 'R63:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'C40:'.
+Info: Processing symbol 'C41:'.
+Info: Processing symbol 'C36:'.
+Info: Processing symbol 'C39:'.
+Info: Processing symbol 'R64:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'R65:Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder'.
+Info: Processing symbol 'C6:Capacitor_SMD:C_0201_0603Metric'.
+Info: Processing symbol 'C38:'.
+Info: Processing symbol 'U8:LM51430XDDCR:SOT-23-THIN-6_DDC_TEX'.
+Info: Processing symbol 'C37:'.
+Add R24 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R69 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add U7 (footprint 'W25Q16JVSSIQ:W25Q16JVSSIQ_WIN').
+Add R21 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R28 (footprint 'Resistor_SMD:R_1206_3216Metric_Pad1.30x1.75mm_HandSolder').
+Add U5 (footprint 'AD7490WBCSZ:CS-32-3_ADI').
+Add U9 (footprint 'LM51430XDDCR:SOT-23-THIN-6_DDC_TEX').
+Add R22 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R25 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add U8 (footprint 'LM51430XDDCR:SOT-23-THIN-6_DDC_TEX').
+Add R23 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R64 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R59 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R58 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R60 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R57 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add U10 (footprint 'BQ25723RSNR:WQFN32_BQ25723_TEX-M').
+Add R56 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R61 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R55 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R62 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R54 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R53 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R63 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R48 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R29 (footprint 'Resistor_SMD:R_1206_3216Metric_Pad1.30x1.75mm_HandSolder').
+Add R65 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R45 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R66 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R67 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R68 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R70 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add U1 (footprint 'RP2350:RP2350B_QFN-80_EP_10.573x10.573_Pitch0.4mm').
+Add U2 (footprint 'BMM350:BGA9_BMM350_BOS-M').
+Add R31 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add U3 (footprint 'BMP390:10LGA_2X2X0p75_BOS-M').
+Add R30 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add U4 (footprint 'Package_TO_SOT_SMD:SOT-223-3_TabPin2').
+Add D3 (footprint 'Connector_PinSocket_2.54mm:PinSocket_1x01_P2.54mm_Vertical').
+Add Q1 (footprint 'Package_DirectFET:DirectFET_SQ').
+Add MT1 (footprint 'ICM_42670_P:XDCR_ICM-42670-P').
+Add L8 (footprint 'Inductor_SMD:L_0201_0603Metric').
+Add L4 (footprint 'Connector_PinSocket_2.54mm:PinSocket_1x01_P2.54mm_Vertical').
+Add L3 (footprint 'Capacitor_SMD:C_1210_3225Metric_Pad1.33x2.70mm_HandSolder').
+Add L2 (footprint 'Capacitor_SMD:C_1210_3225Metric_Pad1.33x2.70mm_HandSolder').
+Add L1 (footprint 'Capacitor_SMD:C_1210_3225Metric_Pad1.33x2.70mm_HandSolder').
+Add J1 (footprint 'Connector_USB:USB_B_OST_USB-B1HSxx_Horizontal').
+Add D4 (footprint 'Connector_PinSocket_2.54mm:PinSocket_1x01_P2.54mm_Vertical').
+Add R19 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add D2 (footprint 'Connector_PinSocket_2.54mm:PinSocket_1x01_P2.54mm_Vertical').
+Add C13 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add C7 (footprint 'Capacitor_SMD:C_0201_0603Metric').
+Add C6 (footprint 'Capacitor_SMD:C_0201_0603Metric').
+Add C5 (footprint 'Capacitor_SMD:C_01005_0402Metric').
+Add C4 (footprint 'Capacitor_SMD:C_01005_0402Metric').
+Add C3 (footprint 'Capacitor_SMD:C_01005_0402Metric').
+Add C2 (footprint 'Capacitor_SMD:C_0402_1005Metric').
+Add C1 (footprint 'Capacitor_SMD:C_0402_1005Metric').
+Add R20 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R11 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R10 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R9 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R7 (footprint 'Connector_USB:USB_B_OST_USB-B1HSxx_Horizontal').
+Add R2 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add Q5 (footprint 'Package_TO_SOT_SMD:TO-252-2').
+Add Q4 (footprint 'Package_TO_SOT_SMD:TO-252-2').
+Add R12 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R14 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R13 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R15 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R16 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add R17 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add Q3 (footprint 'Package_TO_SOT_SMD:TO-252-2').
+Add R18 (footprint 'Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder').
+Add Q2 (footprint 'Package_TO_SOT_SMD:TO-252-2').
+Error: Cannot add C30 (no footprint assigned).
+Error: Cannot add C44 (no footprint assigned).
+Error: Cannot add C31 (no footprint assigned).
+Error: Cannot add C32 (no footprint assigned).
+Error: Cannot add C33 (no footprint assigned).
+Error: Cannot add C34 (no footprint assigned).
+Error: Cannot add C35 (no footprint assigned).
+Error: Cannot add C36 (no footprint assigned).
+Error: Cannot add C37 (no footprint assigned).
+Error: Cannot add C38 (no footprint assigned).
+Error: Cannot add C39 (no footprint assigned).
+Error: Cannot add C40 (no footprint assigned).
+Error: Cannot add C41 (no footprint assigned).
+Error: Cannot add C42 (no footprint assigned).
+Error: Cannot add C43 (no footprint assigned).
+Error: Cannot add C29 (no footprint assigned).
+Error: Cannot add C28 (no footprint assigned).
+Error: Cannot add C27 (no footprint assigned).
+Error: Cannot add C26 (no footprint assigned).
+Error: Cannot add C25 (no footprint assigned).
+Error: Cannot add C24 (no footprint assigned).
+Error: Cannot add C23 (no footprint assigned).
+Error: Cannot add C49 (no footprint assigned).
+Error: Cannot add C22 (no footprint assigned).
+Error: Cannot add C20 (no footprint assigned).
+Error: Cannot add C19 (no footprint assigned).
+Error: Cannot add C18 (no footprint assigned).
+Error: Cannot add C17 (no footprint assigned).
+Error: Cannot add C16 (no footprint assigned).
+Error: Cannot add C15 (no footprint assigned).
+Error: Cannot add C14 (no footprint assigned).
+Error: Cannot add R38 (no footprint assigned).
+Error: Cannot add R46 (no footprint assigned).
+Error: Cannot add C66 (no footprint assigned).
+Error: Cannot add R44 (no footprint assigned).
+Error: Cannot add R43 (no footprint assigned).
+Error: Cannot add R8 (no footprint assigned).
+Error: Cannot add R42 (no footprint assigned).
+Error: Cannot add R41 (no footprint assigned).
+Error: Cannot add R40 (no footprint assigned).
+Error: Cannot add R39 (no footprint assigned).
+Error: Cannot add C65 (no footprint assigned).
+Error: Cannot add L5 (no footprint assigned).
+Error: Cannot add R37 (no footprint assigned).
+Error: Cannot add L6 (no footprint assigned).
+Error: Cannot add R36 (no footprint assigned).
+Error: Cannot add L7 (no footprint assigned).
+Error: Cannot add R35 (no footprint assigned).
+Error: Cannot add R34 (no footprint assigned).
+Error: Cannot add R33 (no footprint assigned).
+Error: Cannot add C55 (no footprint assigned).
+Error: Cannot add C46 (no footprint assigned).
+Error: Cannot add C47 (no footprint assigned).
+Error: Cannot add C48 (no footprint assigned).
+Error: Cannot add R32 (no footprint assigned).
+Error: Cannot add C50 (no footprint assigned).
+Error: Cannot add C51 (no footprint assigned).
+Error: Cannot add C52 (no footprint assigned).
+Error: Cannot add C53 (no footprint assigned).
+Error: Cannot add C54 (no footprint assigned).
+Error: Cannot add C45 (no footprint assigned).
+Error: Cannot add C56 (no footprint assigned).
+Error: Cannot add C57 (no footprint assigned).
+Error: Cannot add C58 (no footprint assigned).
+Error: Cannot add C59 (no footprint assigned).
+Error: Cannot add C60 (no footprint assigned).
+Error: Cannot add C61 (no footprint assigned).
+Error: Cannot add C62 (no footprint assigned).
+Error: Cannot add R47 (no footprint assigned).
+
+
+Info: Total warnings: 0, errors: 69.

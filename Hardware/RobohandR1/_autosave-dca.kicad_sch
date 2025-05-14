@@ -1,0 +1,11 @@
+(kicad_sch
+	(version 20250114)
+	(generator "eeschema")
+	(generator_version "9.0")
+	(uuid "a6b17d63-4850-4e86-b3b4-fa9b33ba82fd")
+	(paper "A4")
+	(title_block
+		(company "Robert Fudge")
+	)
+	(lib_symbols)
+)

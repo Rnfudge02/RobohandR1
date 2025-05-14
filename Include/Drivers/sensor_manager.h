@@ -196,4 +196,12 @@ bool sensor_manager_lock(sensor_manager_t manager);
  */
 void sensor_manager_unlock(sensor_manager_t manager);
 
+// Add to sensor_manager.h
+/**
+ * @brief Get the global sensor manager instance
+ * 
+ * @return Sensor manager handle or NULL if not initialized
+ */
+sensor_manager_t sensor_manager_get_instance(void);
+
 #endif // SENSOR_MANAGER_H

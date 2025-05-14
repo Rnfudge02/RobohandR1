@@ -29,175 +29,148 @@
 
 #include <stdio.h>
 
-void shell_task_func(void *params);
-void check_xip(void);
-uint32_t flash_calculation(uint32_t i);
+#include "system_init.h"
+#include "log_manager.h"
 
-__attribute__((section(".data.ram_func")))
-int main() {
 
-    // Initialize stdio for USB
-    stdio_init_all();
+// Optional: Include specific sensor or peripheral drivers if needed
+// #include "Drivers/Sensors/bmm350_adapter.h"
+
+// Define application version
+#define APP_VERSION "1.0.0"
+#define APP_NAME "RobohandR1"
+
+// Forward declarations for application-specific functions
+static void register_app_commands(void);
+static int cmd_status(int argc, char *argv[]);
+static int cmd_version(int argc, char *argv[]);
+static void init_application(void);
+
+// Application-specific shell commands
+static const shell_command_t app_commands[] = {
+    {"status", "Display application status", cmd_status},
+    {"version", "Show firmware version", cmd_version},
+};
+
+/**
+ * @brief Main entry point
+ * 
+ * Initialize system components and enter the main processing loop.
+ */
+int main(void) {
+    // Initialize system with custom configuration
+    sys_init_config_t config;
+    system_init_get_default_config(&config);
     
-    // Wait for USB to stabilize
-    sleep_ms(2000);
+    // Customize configuration
+    config.app_name = APP_NAME;
+    config.app_version = APP_VERSION;
+    config.flags = SYS_INIT_FLAG_SHELL |      // Enable shell
+                   SYS_INIT_FLAG_SENSORS |    // Enable sensors
+                   SYS_INIT_FLAG_LOGGING |    // Enable logging
+                   SYS_INIT_FLAG_VERBOSE;     // Enable verbose output
     
-    printf("\n\n=== RobohandR1 System Starting ===\n");
+    // Initialize the system
+    sys_init_result_t result = system_init(&config);
+    if (result != SYS_INIT_OK) {
+        printf("System initialization failed with code: %d\n", result);
+        return -1;
+    }
     
-    // Initialize the scheduler
-    printf("Initializing scheduler...\n");
-    if (!scheduler_init()) {
-        printf("Failed to initialize scheduler!\n");
-        while (1) {
-            tight_loop_contents();
-        }
-    }
-
-    // Initialize the stats module
-    printf("Initializing statistics module...\n");
-    if (!stats_init()) {
-        printf("Failed to initialize stats module!\n");
-        while (1) {
-            tight_loop_contents();
-        }
-    }
-
-    // Initialize the stats module
-    printf("Initializing hardware statistics module...\n");
-    if (!cache_fpu_stats_init()) {
-        printf("Failed to initialize hardware stats module!\n");
-        while (1) {
-            tight_loop_contents();
-        }
-    }
-
-    if (!sensor_manager_init()) {
-        printf("Failed to initialize sensor manager\n");
-        printf("Sensors may not be available\n");
-        
-    } else {
-        printf("Sensor manager initialized successfully\n");
-    }
-
-    check_xip();
-
-    // Create shell task
-    int shell_task_id = scheduler_create_task(
-        shell_task_func,
-        NULL,
-        4096,
-        TASK_PRIORITY_HIGH,
-        "shell",
-        0,
-        TASK_TYPE_PERSISTENT
-    );
-
-    printf("Shell task creation result: %d\n", shell_task_id);
-
-    // Also check task info
-    task_control_block_t tcb;
-    if (scheduler_get_task_info(shell_task_id, &tcb)) {
-        printf("Shell task state: %d, priority: %d, core: %d\n", 
-           tcb.state, tcb.priority, tcb.core_affinity);
-    }
-
-    printf("About to start scheduler...\n");
-    if (!scheduler_start()) {
-        printf("Failed to start scheduler!\n");
-        while (1);
-    }
-    printf("Scheduler started successfully\n");
+    // Initialize application-specific components
+    init_application();
     
-    printf("\n=== System Ready ===\n");
-    printf("Type 'help' for available commands\n\n");
+    // Log startup message
+    LOG_INFO("App", "RobohandR1 firmware started successfully");
     
-    // Main loop - just run the shell
-    while (true) {
-        scheduler_run_pending_tasks();
-        tight_loop_contents();
+    // Enter the main system loop (this function never returns)
+    system_run();
+    
+    return 0;  // Never reached
+}
+
+/**
+ * @brief Register application-specific shell commands
+ * 
+ * This function is called by system_init to register any
+ * application-specific commands with the shell.
+ */
+void system_register_commands(void) {
+    register_app_commands();
+}
+
+/**
+ * @brief Register application commands with the shell
+ */
+static void register_app_commands(void) {
+    for (int i = 0; i < sizeof(app_commands) / sizeof(app_commands[0]); i++) {
+        shell_register_command(&app_commands[i]);
+    }
+}
+
+/**
+ * @brief Initialize application-specific components
+ * 
+ * Set up any additional hardware or software components
+ * that are specific to this application.
+ */
+static void init_application(void) {
+    // Initialize application statistics
+    stats_init();
+    
+    // Set up application-specific GPIO
+    // gpio_init(LED_PIN);
+    // gpio_set_dir(LED_PIN, GPIO_OUT);
+    
+    // Initialize any other application-specific hardware
+    
+    LOG_INFO("App", "Application initialization complete");
+}
+
+/**
+ * @brief Command handler for 'status' command
+ * 
+ * Display current application status.
+ */
+static int cmd_status(int argc, char *argv[]) {
+    (void)argc;
+    (void)argv;
+    
+    printf("Application Status:\n");
+    printf("------------------\n");
+    printf("Uptime: %lu ms\n", system_get_uptime_ms());
+    
+    // Get scheduler statistics
+    scheduler_stats_t sched_stats;
+    if (scheduler_get_stats(&sched_stats)) {
+        printf("Tasks created: %lu\n", sched_stats.task_creates);
+        printf("Context switches: %lu\n", sched_stats.context_switches);
+    }
+    
+    // Get system statistics
+    system_stats_t sys_stats;
+    if (stats_get_system(&sys_stats)) {
+        printf("CPU usage: %u%%\n", sys_stats.cpu_usage_percent);
+        printf("Core 0: %u%%\n", sys_stats.core0_usage_percent);
+        printf("Core 1: %u%%\n", sys_stats.core1_usage_percent);
+        printf("Temperature: %lu°C\n", sys_stats.temperature_c);
     }
     
     return 0;
 }
 
-__attribute__((section(".data.ram_func")))
-void shell_task_func(void *params) {
-    (void)params;
-
-    static bool initialized = false;
-
-    if (!initialized) {
-        // Initialize the shell
-        printf("Initializing USB shell...\n");
-        shell_init();
-        register_scheduler_commands();
-        register_stats_commands();
-        register_cache_fpu_commands();
-        register_sensor_manager_commands();
-
-        printf("> ");
-
-        initialized = true;
-    }
+/**
+ * @brief Command handler for 'version' command
+ * 
+ * Display firmware version information.
+ */
+static int cmd_version(int argc, char *argv[]) {
+    (void)argc;
+    (void)argv;
     
-    shell_task();
-    scheduler_yield();
-}
-
-void check_xip(void) {
-    // Report XIP status before changes
-    printf("XIP Cache status (before):\n");
-    printf("  XIP Cache: %s\n", (xip_ctrl_hw->ctrl & XIP_CTRL_EN) ? "Enabled" : "Disabled");
+    printf("%s firmware v%s\n", APP_NAME, APP_VERSION);
+    printf("Build date: %s %s\n", __DATE__, __TIME__);
+    printf("SDK version: %s\n", PICO_SDK_VERSION_STRING);
     
-    // Try to enable the XIP cache if it has a control register
-    xip_ctrl_hw->ctrl |= XIP_CTRL_EN;
-    __dmb();  // Memory barrier
-    
-    // Verify XIP cache state
-    printf("XIP Cache status (after):\n");
-    printf("  XIP Cache: %s\n", (xip_ctrl_hw->ctrl & XIP_CTRL_EN) ? "Enabled" : "Disabled");
-    
-    // Test XIP cache performance
-    printf("Measuring XIP performance...\n");
-    uint32_t start, end;
-    volatile uint32_t sum = 0;
-    
-    // First pass
-    start = time_us_32();
-    for (int i = 0; i < 1000; i++) {
-        // Call a function that resides in flash (XIP region)
-        sum += flash_calculation(i);  // Simple calculation
-    }
-
-    end = time_us_32();
-    uint32_t first_time = end - start;
-    printf("  First pass: %lu µs\n", first_time);
-    
-    // Second pass (should be faster if XIP cache is working)
-    start = time_us_32();
-    for (int i = 0; i < 1000; i++) {
-        sum += flash_calculation(i);  // Same calculation
-    }
-
-    end = time_us_32();
-    uint32_t second_time = end - start;
-    printf("  Second pass: %lu µs\n", second_time);
-    
-    // Calculate speed improvement ratio
-    float speedup = (float)first_time / (float)second_time;
-    printf("  Speed improvement: %.2fx\n", speedup);
-    
-    // Use your hardware stats functions
-    cache_fpu_stats_t stats;
-    cache_fpu_get_stats(&stats);
-    
-    printf("Cache detection results:\n");
-    printf("  I-Cache: %s\n", stats.icache_enabled ? "Enabled" : "Disabled");
-    printf("  D-Cache: %s\n", stats.dcache_enabled ? "Enabled" : "Disabled");
-    printf("  Cache performance test: %lu µs\n", stats.fpu_benchmark_time);
-}
-
-__attribute__((noinline, section(".text")))
-uint32_t flash_calculation(uint32_t i) {
-    return i * i + i + 1;
+    return 0;
 }

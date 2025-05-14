@@ -63,17 +63,23 @@ pico_sdk_init()
 add_executable(RobohandR1 
     ./Src/main.c
     
-    ./Src/Core/hardware_stats.c
-    ./Src/Core/mem_usage.c
-    ./Src/Core/scheduler.c
-    ./Src/Core/sensor_manager_init.c
-    ./Src/Core/stats.c
-    ./Src/Core/usb_shell.c
+    ./Src/Core/Stats/hardware_stats.c
+    ./Src/Core/Stats/mem_usage.c
+    ./Src/Core/Stats/stats.c
+
+    ./Src/Core/Scheduler/fault_handlers.c
+    ./Src/Core/Scheduler/log_manager.c
+    ./Src/Core/Scheduler/scheduler.c
+    ./Src/Core/Scheduler/scheduler_tz.c
+    ./Src/Core/Scheduler/scheduler_mpu_tz.c
+    ./Src/Core/Scheduler/sensor_manager_init.c
+    ./Src/Core/Scheduler/system_init.c
 
     ./Src/Core/Shell/sensor_manager_shell_commands.c
     ./Src/Core/Shell/hardware_stats_shell_commands.c
     ./Src/Core/Shell/scheduler_shell_commands.c
     ./Src/Core/Shell/stats_shell_commands.c
+    ./Src/Core/Shell/usb_shell.c
     
     ./Src/Drivers/bmm350_adapter.c
     ./Src/Drivers/i2c_driver.c
@@ -97,7 +103,9 @@ target_include_directories(RobohandR1 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
     ${CMAKE_CURRENT_LIST_DIR}/Include
     ${CMAKE_CURRENT_LIST_DIR}/Include/Core
+    ${CMAKE_CURRENT_LIST_DIR}/Include/Core/Scheduler
     ${CMAKE_CURRENT_LIST_DIR}/Include/Core/Shell
+    ${CMAKE_CURRENT_LIST_DIR}/Include/Core/Stats
     ${CMAKE_CURRENT_LIST_DIR}/Include/Drivers
     ${CMAKE_CURRENT_LIST_DIR}/Dependencies/bmm350-sensorapi
     ${CMAKE_CURRENT_LIST_DIR}/Dependencies/bmp390-sensorapi

@@ -1,0 +1,147 @@
+(kicad_sch
+	(version 20250114)
+	(generator "eeschema")
+	(generator_version "9.0")
+	(uuid "309d9ae9-da17-46fc-b276-64a575cef920")
+	(paper "A4")
+	(title_block
+		(title "Robohand PCB")
+		(date "2025-04-21")
+		(rev "0")
+		(company "Robert Fudge")
+		(comment 1 "Not To Scale")
+	)
+	(lib_symbols)
+	(sheet
+		(at 133.35 17.78)
+		(size 142.24 142.24)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 255 0.5000)
+		)
+		(uuid "9a870aa9-1bd2-46cd-9645-7a3c2c6368e0")
+		(property "Sheetname" "Digital Side"
+			(at 133.35 17.0684 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "dtm.kicad_sch"
+			(at 133.35 160.6046 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "RobohandR1"
+				(path "/309d9ae9-da17-46fc-b276-64a575cef920"
+					(page "3")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 17.78 19.05)
+		(size 63.5 172.72)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 255 0 0 0.6500)
+		)
+		(uuid "9d76c8f8-b9fc-4497-b26f-1c8e52e7c0aa")
+		(property "Sheetname" "Analog Side"
+			(at 17.78 18.3384 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "adc.kicad_sch"
+			(at 17.78 192.3546 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "RobohandR1"
+				(path "/309d9ae9-da17-46fc-b276-64a575cef920"
+					(page "2")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 83.82 19.05)
+		(size 45.72 140.97)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 127 127 0.5000)
+		)
+		(uuid "a1c0c92a-ffee-472c-9111-5fb818c5753b")
+		(property "Sheetname" "Power Management"
+			(at 83.82 18.3384 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "pm.kicad_sch"
+			(at 83.82 160.6046 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "RobohandR1"
+				(path "/309d9ae9-da17-46fc-b276-64a575cef920"
+					(page "4")
+				)
+			)
+		)
+	)
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+	(embedded_fonts no)
+)

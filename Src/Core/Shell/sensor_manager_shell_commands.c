@@ -6,18 +6,13 @@
 
 #include "sensor_manager_shell_commands.h"
 #include "sensor_manager.h"
+#include "sensor_manager_init.h"
 #include "i2c_driver.h"
 #include "scheduler.h"
 #include "bmm350_adapter.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-// External reference to the global sensor manager
-// This will be initialized in sensor_manager_init.c
-extern sensor_manager_t g_sensor_manager;
-extern i2c_driver_ctx_t* g_i2c_driver;
-extern int g_sensor_task_id;
 
 // Shell command handler for sensor operations
 int cmd_sensor(int argc, char *argv[]) {
@@ -38,7 +33,9 @@ int cmd_sensor(int argc, char *argv[]) {
         return 1;
     }
 
-    if (g_sensor_manager == NULL) {
+    // Get the sensor manager instance through the accessor function
+    sensor_manager_t manager = sensor_manager_get_instance();
+    if (manager == NULL) {
         printf("Sensor manager not initialized\n");
         return 1;
     }
@@ -64,21 +61,51 @@ int cmd_sensor(int argc, char *argv[]) {
     // Process commands
     if (strcmp(argv[1], "info") == 0) {
         printf("Sensor Manager Status:\n");
-        printf("Task ID: %d\n", g_sensor_task_id);
-        printf("I2C Driver: %s\n", g_i2c_driver ? "Initialized" : "Not initialized");
+        
+        // Get scheduler task info to display task ID
+        int task_id = -1;
+        for (int i = 0; i < 100; i++) {  // Search for the sensor manager task
+            task_control_block_t tcb;
+            if (scheduler_get_task_info(i, &tcb)) {
+                if (strcmp(tcb.name, "sensor_mgr") == 0) {
+                    task_id = i;
+                    break;
+                }
+            }
+        }
+        
+        printf("Task ID: %d\n", task_id);
+        
+        // Check if sensors are available
         printf("Registered sensors:\n");
-        printf("  - Magnetometer (BMM350): %s\n", 
-               sensor_manager_get_data(g_sensor_manager, SENSOR_TYPE_MAGNETOMETER, NULL) ? "Available" : "Not available");
-        printf("  - Accelerometer: %s\n", 
-               sensor_manager_get_data(g_sensor_manager, SENSOR_TYPE_ACCELEROMETER, NULL) ? "Available" : "Not available");
-        printf("  - Gyroscope: %s\n", 
-               sensor_manager_get_data(g_sensor_manager, SENSOR_TYPE_GYROSCOPE, NULL) ? "Available" : "Not available");
-        printf("  - Temperature: %s\n", 
-               sensor_manager_get_data(g_sensor_manager, SENSOR_TYPE_TEMPERATURE, NULL) ? "Available" : "Not available");
-        printf("  - Pressure: %s\n", 
-               sensor_manager_get_data(g_sensor_manager, SENSOR_TYPE_PRESSURE, NULL) ? "Available" : "Not available");
-        printf("  - Humidity: %s\n", 
-               sensor_manager_get_data(g_sensor_manager, SENSOR_TYPE_HUMIDITY, NULL) ? "Available" : "Not available");
+        sensor_type_t types[SENSOR_MANAGER_MAX_SENSORS];
+        bool statuses[SENSOR_MANAGER_MAX_SENSORS];
+        int count = sensor_manager_get_all_statuses(manager, types, statuses, SENSOR_MANAGER_MAX_SENSORS);
+        
+        if (count == 0) {
+            printf("  No sensors found\n");
+        } else {
+            for (int i = 0; i < count; i++) {
+                const char* type_name = "Unknown";
+                
+                // Convert type to string
+                switch (types[i]) {
+                    case SENSOR_TYPE_ACCELEROMETER: type_name = "Accelerometer"; break;
+                    case SENSOR_TYPE_GYROSCOPE: type_name = "Gyroscope"; break;
+                    case SENSOR_TYPE_MAGNETOMETER: type_name = "Magnetometer"; break;
+                    case SENSOR_TYPE_PRESSURE: type_name = "Pressure"; break;
+                    case SENSOR_TYPE_TEMPERATURE: type_name = "Temperature"; break;
+                    case SENSOR_TYPE_HUMIDITY: type_name = "Humidity"; break;
+                    case SENSOR_TYPE_LIGHT: type_name = "Light"; break;
+                    case SENSOR_TYPE_PROXIMITY: type_name = "Proximity"; break;
+                    case SENSOR_TYPE_IMU: type_name = "IMU"; break;
+                    case SENSOR_TYPE_ENV: type_name = "Environmental"; break;
+                    default: type_name = "Unknown"; break;
+                }
+                
+                printf("  - %s: %s\n", type_name, statuses[i] ? "Running" : "Stopped");
+            }
+        }
         
     } else if (strcmp(argv[1], "start") == 0) {
         if (argc > 2) {
@@ -88,7 +115,7 @@ int cmd_sensor(int argc, char *argv[]) {
                 return 1;
             }
             
-            if (sensor_manager_start_sensor(g_sensor_manager, type)) {
+            if (sensor_manager_start_sensor(manager, type)) {
                 printf("Started sensor: %s\n", argv[2]);
             } else {
                 printf("Failed to start sensor: %s\n", argv[2]);
@@ -96,7 +123,7 @@ int cmd_sensor(int argc, char *argv[]) {
             }
         } else {
             // Start all sensors
-            if (sensor_manager_start_all(g_sensor_manager)) {
+            if (sensor_manager_start_all(manager)) {
                 printf("Started all sensors\n");
             } else {
                 printf("Failed to start all sensors\n");
@@ -112,7 +139,7 @@ int cmd_sensor(int argc, char *argv[]) {
                 return 1;
             }
             
-            if (sensor_manager_stop_sensor(g_sensor_manager, type)) {
+            if (sensor_manager_stop_sensor(manager, type)) {
                 printf("Stopped sensor: %s\n", argv[2]);
             } else {
                 printf("Failed to stop sensor: %s\n", argv[2]);
@@ -120,7 +147,7 @@ int cmd_sensor(int argc, char *argv[]) {
             }
         } else {
             // Stop all sensors
-            if (sensor_manager_stop_all(g_sensor_manager)) {
+            if (sensor_manager_stop_all(manager)) {
                 printf("Stopped all sensors\n");
             } else {
                 printf("Failed to stop all sensors\n");
@@ -140,7 +167,7 @@ int cmd_sensor(int argc, char *argv[]) {
         }
         
         sensor_data_t data;
-        if (sensor_manager_get_data(g_sensor_manager, type, &data)) {
+        if (sensor_manager_get_data(manager, type, &data)) {
             // Data will be printed by the callback, but we can also print it here
             switch(type) {
                 case SENSOR_TYPE_MAGNETOMETER:
@@ -203,7 +230,7 @@ int cmd_sensor(int argc, char *argv[]) {
             return 1;
         }
         
-        if (sensor_manager_set_power_mode(g_sensor_manager, type, mode)) {
+        if (sensor_manager_set_power_mode(manager, type, mode)) {
             printf("Set power mode for %s to %s\n", argv[2], argv[3]);
         } else {
             printf("Failed to set power mode\n");
@@ -237,7 +264,7 @@ int cmd_sensor(int argc, char *argv[]) {
             return 1;
         }
         
-        if (sensor_manager_set_rate(g_sensor_manager, type, rate)) {
+        if (sensor_manager_set_rate(manager, type, rate)) {
             printf("Set rate for %s to %s\n", argv[2], argv[3]);
         } else {
             printf("Failed to set rate\n");
@@ -247,12 +274,6 @@ int cmd_sensor(int argc, char *argv[]) {
     } else if (strcmp(argv[1], "status") == 0) {
         sensor_type_t types[SENSOR_MANAGER_MAX_SENSORS];
         bool statuses[SENSOR_MANAGER_MAX_SENSORS];
-        
-        sensor_manager_t manager = sensor_manager_get_instance();
-        if (manager == NULL) {
-            printf("Sensor manager not initialized\n");
-            return -1;
-        }
         
         int count = sensor_manager_get_all_statuses(manager, types, statuses, SENSOR_MANAGER_MAX_SENSORS);
         
