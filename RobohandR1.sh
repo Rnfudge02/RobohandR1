@@ -234,13 +234,24 @@ check_ninja() {
 }
 
 # Function to generate AI prompt template
+# Function to generate AI prompt template
 generate_prompt_template() {
     local prompt_file="./Outputs/prompt_file.txt"
     local request=""
     local include_core=0
+    local include_core_init=0
+    local include_core_manager=0
+    local include_core_scheduler=0
+    local include_core_shell=0
+    local include_core_stats=0
+    local include_components=0
     local include_drivers=0
+    local include_drivers_devices=0
+    local include_drivers_i2c=0
+    local include_drivers_spi=0
     local include_cmake=0
     local include_readme=0
+    local include_main=0
 
     # Parse arguments after -a
     while [[ $# -gt 0 ]]; do
@@ -249,8 +260,44 @@ generate_prompt_template() {
                 include_core=1
                 shift
                 ;;
+            --core-init)
+                include_core_init=1
+                shift
+                ;;
+            --core-manager)
+                include_core_manager=1
+                shift
+                ;;
+            --core-scheduler)
+                include_core_scheduler=1
+                shift
+                ;;
+            --core-shell)
+                include_core_shell=1
+                shift
+                ;;
+            --core-stats)
+                include_core_stats=1
+                shift
+                ;;
+            --components)
+                include_components=1
+                shift
+                ;;
             --drivers)
                 include_drivers=1
+                shift
+                ;;
+            --drivers-devices)
+                include_drivers_devices=1
+                shift
+                ;;
+            --drivers-i2c)
+                include_drivers_i2c=1
+                shift
+                ;;
+            --drivers-spi)
+                include_drivers_spi=1
                 shift
                 ;;
             --cmake)
@@ -261,11 +308,31 @@ generate_prompt_template() {
                 include_readme=1
                 shift
                 ;;
+            --main)
+                include_main=1
+                shift
+                ;;
             --all)
                 include_core=1
+                include_components=1
                 include_drivers=1
                 include_cmake=1
                 include_readme=1
+                include_main=1
+                shift
+                ;;
+            --all-core)
+                include_core_init=1
+                include_core_manager=1
+                include_core_scheduler=1
+                include_core_shell=1
+                include_core_stats=1
+                shift
+                ;;
+            --all-drivers)
+                include_drivers_devices=1
+                include_drivers_i2c=1
+                include_drivers_spi=1
                 shift
                 ;;
             *)
@@ -276,29 +343,152 @@ generate_prompt_template() {
         esac
     done
 
+    # If generic core is set, enable all core submodules
+    if [ $include_core -eq 1 ]; then
+        include_core_init=1
+        include_core_manager=1
+        include_core_scheduler=1
+        include_core_shell=1
+        include_core_stats=1
+    fi
+
+    # If generic drivers is set, enable all driver submodules
+    if [ $include_drivers -eq 1 ]; then
+        include_drivers_devices=1
+        include_drivers_i2c=1
+        include_drivers_spi=1
+    fi
+
     log_message "INFO" "Generating prompt template file"
-    rm -rf ./$prompt_file
+    mkdir -p ./Outputs
+    rm -f ./$prompt_file
 
     # Add README if requested
     if [ $include_readme -eq 1 ] && [ -f "./README.md" ]; then
         log_message "INFO" "Including README"
+        echo -e "=== README ===\n" >> $prompt_file
         cat ./README.md >> $prompt_file
+        echo -e "\n\n" >> $prompt_file
     fi
 
-    # Add requested components
-    echo -e "=== PROJECT STRUCTURE ===" >> $prompt_file
-    if [ $include_core -eq 1 ]; then
-        find ./Include/Core ./Src/Core -type f | sort >> $prompt_file
+    # Add requested component files list
+    echo -e "=== PROJECT STRUCTURE ===\n" >> $prompt_file
+
+    # Core submodules file listing
+    if [ $include_core_init -eq 1 ] || [ $include_core_manager -eq 1 ] || [ $include_core_scheduler -eq 1 ] || [ $include_core_shell -eq 1 ] || [ $include_core_stats -eq 1 ]; then
+        echo -e "Core Files:\n" >> $prompt_file
+        
+        if [ $include_core_init -eq 1 ]; then
+            log_message "INFO" "Listing Core/Init files"
+            find ./Src/Core/Init -type f | sort >> $prompt_file
+        fi
+        
+        if [ $include_core_manager -eq 1 ]; then
+            log_message "INFO" "Listing Core/Manager files"
+            find ./Src/Core/Manager -type f | sort >> $prompt_file
+        fi
+        
+        if [ $include_core_scheduler -eq 1 ]; then
+            log_message "INFO" "Listing Core/Scheduler files"
+            find ./Src/Core/Scheduler -type f | sort >> $prompt_file
+        fi
+        
+        if [ $include_core_shell -eq 1 ]; then
+            log_message "INFO" "Listing Core/Shell files"
+            find ./Src/Core/Shell -type f | sort >> $prompt_file
+        fi
+        
+        if [ $include_core_stats -eq 1 ]; then
+            log_message "INFO" "Listing Core/Stats files"
+            find ./Src/Core/Stats -type f | sort >> $prompt_file
+        fi
+        
+        echo -e "\n" >> $prompt_file
     fi
-    if [ $include_drivers -eq 1 ]; then
-        find ./Include/Drivers ./Src/Drivers -type f | sort >> $prompt_file
+    
+    if [ $include_components -eq 1 ]; then
+        log_message "INFO" "Listing Component files"
+        echo -e "Component Files:\n" >> $prompt_file
+        find ./Src/Components -type f | sort >> $prompt_file
+        echo -e "\n" >> $prompt_file
+    fi
+    
+    # Drivers submodules file listing
+    if [ $include_drivers_devices -eq 1 ] || [ $include_drivers_i2c -eq 1 ] || [ $include_drivers_spi -eq 1 ]; then
+        echo -e "Driver Files:\n" >> $prompt_file
+        
+        if [ $include_drivers_devices -eq 1 ]; then
+            log_message "INFO" "Listing Drivers/Devices files"
+            find ./Src/Drivers/Devices -type f | sort >> $prompt_file
+        fi
+        
+        if [ $include_drivers_i2c -eq 1 ]; then
+            log_message "INFO" "Listing Drivers/I2C files"
+            find ./Src/Drivers/I2C -type f | sort >> $prompt_file
+        fi
+        
+        if [ $include_drivers_spi -eq 1 ]; then
+            log_message "INFO" "Listing Drivers/SPI files"
+            find ./Src/Drivers/SPI -type f | sort >> $prompt_file
+        fi
+        
+        echo -e "\n" >> $prompt_file
+    fi
+
+    if [ $include_main -eq 1 ] && [ -f "./Src/main.c" ]; then
+        log_message "INFO" "Listing main.c"
+        echo -e "Main File:\n" >> $prompt_file
+        echo "./Src/main.c" >> $prompt_file
+        echo -e "\n" >> $prompt_file
     fi
 
     # Add specific file content
-    echo -e "\n=== CODE CONTENT ===" >> $prompt_file
-    if [ $include_core -eq 1 ]; then
-        # Use find to recursively get all files in Core subdirectories
-        for FILE in $(find ./Include/Core ./Src/Core -type f | sort); do
+    echo -e "\n=== CODE CONTENT ===\n" >> $prompt_file
+    
+    # Core submodules content
+    if [ $include_core_init -eq 1 ]; then
+        log_message "INFO" "Adding Core/Init code content"
+        for FILE in $(find ./Src/Core/Init -type f | sort); do
+            if [ -f "$FILE" ]; then
+                echo -e "\n// File: $FILE" >> $prompt_file
+                cat $FILE >> $prompt_file
+            fi
+        done
+    fi
+    
+    if [ $include_core_manager -eq 1 ]; then
+        log_message "INFO" "Adding Core/Manager code content"
+        for FILE in $(find ./Src/Core/Manager -type f | sort); do
+            if [ -f "$FILE" ]; then
+                echo -e "\n// File: $FILE" >> $prompt_file
+                cat $FILE >> $prompt_file
+            fi
+        done
+    fi
+    
+    if [ $include_core_scheduler -eq 1 ]; then
+        log_message "INFO" "Adding Core/Scheduler code content"
+        for FILE in $(find ./Src/Core/Scheduler -type f | sort); do
+            if [ -f "$FILE" ]; then
+                echo -e "\n// File: $FILE" >> $prompt_file
+                cat $FILE >> $prompt_file
+            fi
+        done
+    fi
+    
+    if [ $include_core_shell -eq 1 ]; then
+        log_message "INFO" "Adding Core/Shell code content"
+        for FILE in $(find ./Src/Core/Shell -type f | sort); do
+            if [ -f "$FILE" ]; then
+                echo -e "\n// File: $FILE" >> $prompt_file
+                cat $FILE >> $prompt_file
+            fi
+        done
+    fi
+    
+    if [ $include_core_stats -eq 1 ]; then
+        log_message "INFO" "Adding Core/Stats code content"
+        for FILE in $(find ./Src/Core/Stats -type f | sort); do
             if [ -f "$FILE" ]; then
                 echo -e "\n// File: $FILE" >> $prompt_file
                 cat $FILE >> $prompt_file
@@ -306,27 +496,66 @@ generate_prompt_template() {
         done
     fi
 
-    if [ $include_drivers -eq 1 ]; then
-        for FILE in ./Include/Drivers/* ./Src/Drivers/*; do
+    if [ $include_components -eq 1 ]; then
+        log_message "INFO" "Adding Components code content"
+        for FILE in $(find ./Src/Components -type f | sort); do
             if [ -f "$FILE" ]; then
                 echo -e "\n// File: $FILE" >> $prompt_file
                 cat $FILE >> $prompt_file
             fi
         done
+    fi
+
+    # Drivers submodules content
+    if [ $include_drivers_devices -eq 1 ]; then
+        log_message "INFO" "Adding Drivers/Devices code content"
+        for FILE in $(find ./Src/Drivers/Devices -type f | sort); do
+            if [ -f "$FILE" ]; then
+                echo -e "\n// File: $FILE" >> $prompt_file
+                cat $FILE >> $prompt_file
+            fi
+        done
+    fi
+    
+    if [ $include_drivers_i2c -eq 1 ]; then
+        log_message "INFO" "Adding Drivers/I2C code content"
+        for FILE in $(find ./Src/Drivers/I2C -type f | sort); do
+            if [ -f "$FILE" ]; then
+                echo -e "\n// File: $FILE" >> $prompt_file
+                cat $FILE >> $prompt_file
+            fi
+        done
+    fi
+    
+    if [ $include_drivers_spi -eq 1 ]; then
+        log_message "INFO" "Adding Drivers/SPI code content"
+        for FILE in $(find ./Src/Drivers/SPI -type f | sort); do
+            if [ -f "$FILE" ]; then
+                echo -e "\n// File: $FILE" >> $prompt_file
+                cat $FILE >> $prompt_file
+            fi
+        done
+    fi
+
+    if [ $include_main -eq 1 ] && [ -f "./Src/main.c" ]; then
+        log_message "INFO" "Adding main.c content"
+        echo -e "\n// File: ./Src/main.c" >> $prompt_file
+        cat ./Src/main.c >> $prompt_file
     fi
 
     if [ $include_cmake -eq 1 ] && [ -f "CMakeLists.txt" ]; then
-        echo -e "\n=== CMAKE CONFIGURATION ===" >> $prompt_file
+        echo -e "\n=== CMAKE CONFIGURATION ===\n" >> $prompt_file
         cat CMakeLists.txt >> $prompt_file
     fi
 
     # Add user request if provided
     if [ -n "$request" ]; then
-        echo -e "\n=== USER REQUEST ===" >> $prompt_file
+        echo -e "\n=== USER REQUEST ===\n" >> $prompt_file
         echo -e "$request" >> $prompt_file
     fi
 
     log_message "SUCCESS" "Prompt template created: $prompt_file"
+    log_message "INFO" "File size: $(du -h $prompt_file | cut -f1)"
 }
 
 # Function to build the project
@@ -344,13 +573,7 @@ build_project() {
     rm -rf $BUILD_DIR/*
     cd $BUILD_DIR
 
-    # Configure and build with Ninja
-    if [ "$verbose" == "verbose" ]; then
-        log_message "INFO" "Using verbose build mode"
-        cmake .. -G Ninja -DCMAKE_VERBOSE_MAKEFILE=ON -DCMAKE_COMPILE_COMMANDS=ON
-    else
-        cmake .. -G Ninja
-    fi
+    cmake   -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=TRUE -S.. -B$BUILD_DIR -G Ninja
     
     if ninja; then
         log_message "SUCCESS" "Build completed successfully"
@@ -809,7 +1032,11 @@ display_help() {
     echo -e "${FG_CYAN}${BOLD}Usage:${RESET} ./$SCRIPT_NAME [OPTION] [ARGS]"
     echo -e ""
     echo -e "${FG_CYAN}${BOLD}Options:${RESET}"
-    printf "${FG_GREEN}%-4s %-15s${RESET} %s\n" "-a" "AI-prompt" "Generate LLM prompt template [options: --core, --drivers, --cmake, --readme, --all]"
+    printf "${FG_GREEN}%-4s %-15s${RESET} %s\n" "-a" "AI-prompt" "Generate LLM prompt template with options:"
+    echo -e "      Core modules:    ${FG_YELLOW}--core-init --core-manager --core-scheduler --core-shell --core-stats${RESET}"
+    echo -e "      Driver modules:  ${FG_YELLOW}--drivers-devices --drivers-i2c --drivers-spi${RESET}"
+    echo -e "      Other options:   ${FG_YELLOW}--components --cmake --readme --main${RESET}"
+    echo -e "      Grouped options: ${FG_YELLOW}--all --all-core --all-drivers${RESET}"
     printf "${FG_GREEN}%-4s %-15s${RESET} %s\n" "-b" "Build" "Build RobohandR1 project [optional: verbose]"
     printf "${FG_GREEN}%-4s %-15s${RESET} %s\n" "-d" "Document" "Generate Doxygen documentation"
     printf "${FG_GREEN}%-4s %-15s${RESET} %s\n" "-h" "Help" "Display this help message"

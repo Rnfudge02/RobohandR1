@@ -6,50 +6,32 @@
 #include "pico/stdlib.h"
 #include "hardware/structs/scb.h"
 #include "hardware/sync.h"
-#include "hardware/structs/xip_ctrl.h"  // For XIP control
-#include "hardware/xip_cache.h"         // For XIP functions
 
-// Define the control bit if not defined already
-#ifndef XIP_CTRL_EN
-#define XIP_CTRL_EN (1u << 0)  // Typically bit 0 is the enable bit
 
-#endif
-
-#include "hardware_stats.h"
 #include "scheduler.h"
 #include "sensor_manager.h"
-#include "sensor_manager_init.h"
 #include "stats.h"
 #include "usb_shell.h"
 
-#include "hardware_stats_shell_commands.h"
-#include "sensor_manager_shell_commands.h"
-#include "scheduler_shell_commands.h"
-#include "stats_shell_commands.h"
 
 #include <stdio.h>
 
-#include "system_init.h"
+#include "kernel_init.h"
 #include "log_manager.h"
-
-
-// Optional: Include specific sensor or peripheral drivers if needed
-// #include "Drivers/Sensors/bmm350_adapter.h"
 
 // Define application version
 #define APP_VERSION "1.0.0"
 #define APP_NAME "RobohandR1"
 
 // Forward declarations for application-specific functions
-static void register_app_commands(void);
 static int cmd_status(int argc, char *argv[]);
 static int cmd_version(int argc, char *argv[]);
 static void init_application(void);
 
 // Application-specific shell commands
 static const shell_command_t app_commands[] = {
-    {"status", "Display application status", cmd_status},
-    {"version", "Show firmware version", cmd_version},
+    {cmd_status, "status", "Display application status"},
+    {cmd_version, "version", "Show firmware version"},
 };
 
 /**
@@ -59,19 +41,15 @@ static const shell_command_t app_commands[] = {
  */
 int main(void) {
     // Initialize system with custom configuration
-    sys_init_config_t config;
-    system_init_get_default_config(&config);
+    kernel_config_t config;
+    kernel_get_default_config(&config);
     
     // Customize configuration
     config.app_name = APP_NAME;
     config.app_version = APP_VERSION;
-    config.flags = SYS_INIT_FLAG_SHELL |      // Enable shell
-                   SYS_INIT_FLAG_SENSORS |    // Enable sensors
-                   SYS_INIT_FLAG_LOGGING |    // Enable logging
-                   SYS_INIT_FLAG_VERBOSE;     // Enable verbose output
     
     // Initialize the system
-    sys_init_result_t result = system_init(&config);
+    kernel_result_t result = kernel_init(&config);
     if (result != SYS_INIT_OK) {
         printf("System initialization failed with code: %d\n", result);
         return -1;
@@ -81,50 +59,12 @@ int main(void) {
     init_application();
     
     // Log startup message
-    LOG_INFO("App", "RobohandR1 firmware started successfully");
+    LOG_INFO("Main", "RobohandR1 firmware started successfully");
     
     // Enter the main system loop (this function never returns)
-    system_run();
+    kernel_run();
     
     return 0;  // Never reached
-}
-
-/**
- * @brief Register application-specific shell commands
- * 
- * This function is called by system_init to register any
- * application-specific commands with the shell.
- */
-void system_register_commands(void) {
-    register_app_commands();
-}
-
-/**
- * @brief Register application commands with the shell
- */
-static void register_app_commands(void) {
-    for (int i = 0; i < sizeof(app_commands) / sizeof(app_commands[0]); i++) {
-        shell_register_command(&app_commands[i]);
-    }
-}
-
-/**
- * @brief Initialize application-specific components
- * 
- * Set up any additional hardware or software components
- * that are specific to this application.
- */
-static void init_application(void) {
-    // Initialize application statistics
-    stats_init();
-    
-    // Set up application-specific GPIO
-    // gpio_init(LED_PIN);
-    // gpio_set_dir(LED_PIN, GPIO_OUT);
-    
-    // Initialize any other application-specific hardware
-    
-    LOG_INFO("App", "Application initialization complete");
 }
 
 /**
@@ -136,24 +76,24 @@ static int cmd_status(int argc, char *argv[]) {
     (void)argc;
     (void)argv;
     
-    printf("Application Status:\n");
-    printf("------------------\n");
-    printf("Uptime: %lu ms\n", system_get_uptime_ms());
+    LOG_INFO("Stats", "Application Status");
+    LOG_INFO("Stats", "------------------");
+    LOG_INFO("Stats", "Uptime: %lu ms.", kernel_get_uptime_ms());
     
     // Get scheduler statistics
     scheduler_stats_t sched_stats;
     if (scheduler_get_stats(&sched_stats)) {
-        printf("Tasks created: %lu\n", sched_stats.task_creates);
-        printf("Context switches: %lu\n", sched_stats.context_switches);
+        LOG_INFO("Stats", "Tasks created: %lu.", sched_stats.task_creates);
+        LOG_INFO("Stats", "Context switches: %lu.", sched_stats.context_switches);
     }
     
     // Get system statistics
     system_stats_t sys_stats;
     if (stats_get_system(&sys_stats)) {
-        printf("CPU usage: %u%%\n", sys_stats.cpu_usage_percent);
-        printf("Core 0: %u%%\n", sys_stats.core0_usage_percent);
-        printf("Core 1: %u%%\n", sys_stats.core1_usage_percent);
-        printf("Temperature: %lu°C\n", sys_stats.temperature_c);
+        LOG_INFO("Stats", "CPU usage: %u%%", sys_stats.cpu_usage_percent);
+        LOG_INFO("Stats", "Core 0: %u%%", sys_stats.core0_usage_percent);
+        LOG_INFO("Stats", "Core 1: %u%%", sys_stats.core1_usage_percent);
+        LOG_INFO("Stats", "Temperature: %lu°C.", sys_stats.temperature_c);
     }
     
     return 0;
@@ -168,9 +108,37 @@ static int cmd_version(int argc, char *argv[]) {
     (void)argc;
     (void)argv;
     
-    printf("%s firmware v%s\n", APP_NAME, APP_VERSION);
-    printf("Build date: %s %s\n", __DATE__, __TIME__);
-    printf("SDK version: %s\n", PICO_SDK_VERSION_STRING);
+    LOG_INFO("Firmware", "%s firmware v%s", APP_NAME, APP_VERSION);
+    LOG_INFO("Firmware", "Build date: %s %s", __DATE__, __TIME__);
+    LOG_INFO("Firmware", "SDK version: %s", PICO_SDK_VERSION_STRING);
     
     return 0;
+}
+
+/**
+ * @brief Initialize application-specific components
+ * 
+ * Set up any additional hardware or software components
+ * that are specific to this application.
+ */
+static void init_application(void) {
+    // Initialize application statistics
+    stats_init();
+    
+    // Initialize any other application-specific hardware
+    
+    LOG_INFO("Main", "Application initialization complete");
+}
+
+
+/**
+ * @brief Register application-specific shell commands
+ * 
+ * This function is called by kernel_init to register any
+ * application-specific commands with the shell.
+ */
+void system_register_commands(void) {
+    for (int i = 0; i < sizeof(app_commands) / sizeof(app_commands[0]); i++) {
+        shell_register_command(&app_commands[i]);
+    }
 }

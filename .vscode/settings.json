@@ -1,50 +1,101 @@
 {
-    "cmake.options.statusBarVisibility": "hidden",
-    "cmake.options.advanced": {
-        "build": {
-            "statusBarVisibility": "hidden"
-        },
-        "launch": {
-            "statusBarVisibility": "hidden"
-        },
-        "debug": {
-            "statusBarVisibility": "hidden"
-        }
+  "cmake.options.statusBarVisibility": "hidden",
+  "cmake.options.advanced": {
+    "build": {
+      "statusBarVisibility": "hidden"
     },
-    "cmake.configureOnEdit": true,
-    "cmake.automaticReconfigure": true,
-    "cmake.configureOnOpen": true,
-    "cmake.generator": "Ninja",
-    "cmake.cmakePath": "${userHome}/.pico-sdk/cmake/v3.31.5/bin/cmake",
-    "C_Cpp.debugShortcut": false,
-    "terminal.integrated.env.windows": {
-        "PICO_SDK_PATH": "${env:USERPROFILE}/.pico-sdk/sdk/2.1.1",
-        "PICO_TOOLCHAIN_PATH": "${env:USERPROFILE}/.pico-sdk/toolchain/14_2_Rel1",
-        "Path": "${env:USERPROFILE}/.pico-sdk/toolchain/14_2_Rel1/bin;${env:USERPROFILE}/.pico-sdk/picotool/2.1.1/picotool;${env:USERPROFILE}/.pico-sdk/cmake/v3.31.5/bin;${env:USERPROFILE}/.pico-sdk/ninja/v1.12.1;${env:PATH}"
+    "launch": {
+      "statusBarVisibility": "hidden"
     },
-    "terminal.integrated.env.osx": {
-        "PICO_SDK_PATH": "${env:HOME}/.pico-sdk/sdk/2.1.1",
-        "PICO_TOOLCHAIN_PATH": "${env:HOME}/.pico-sdk/toolchain/14_2_Rel1",
-        "PATH": "${env:HOME}/.pico-sdk/toolchain/14_2_Rel1/bin:${env:HOME}/.pico-sdk/picotool/2.1.1/picotool:${env:HOME}/.pico-sdk/cmake/v3.31.5/bin:${env:HOME}/.pico-sdk/ninja/v1.12.1:${env:PATH}"
-    },
-    "terminal.integrated.env.linux": {
-        "PICO_SDK_PATH": "${env:HOME}/.pico-sdk/sdk/2.1.1",
-        "PICO_TOOLCHAIN_PATH": "${env:HOME}/.pico-sdk/toolchain/14_2_Rel1",
-        "PATH": "${env:HOME}/.pico-sdk/toolchain/14_2_Rel1/bin:${env:HOME}/.pico-sdk/picotool/2.1.1/picotool:${env:HOME}/.pico-sdk/cmake/v3.31.5/bin:${env:HOME}/.pico-sdk/ninja/v1.12.1:${env:PATH}"
-    },
-    "raspberry-pi-pico.cmakeAutoConfigure": false,
-    "raspberry-pi-pico.useCmakeTools": true,
-    "raspberry-pi-pico.cmakePath": "${HOME}/.pico-sdk/cmake/v3.31.5/bin/cmake",
-    "raspberry-pi-pico.ninjaPath": "${HOME}/.pico-sdk/ninja/v1.12.1/ninja",
-    "files.associations": {
-        "string.h": "c",
-        "bmm350_adapter.h": "c",
-        "scheduler.h": "c",
-        "scheduler_shell_commands.h": "c",
-        "stats.h": "c",
-        "stats_shell_commands.h": "c",
-        "hardware_stats_shell_commands.h": "c",
-        "usb_shell.h": "c",
-        "functional": "c"
+    "debug": {
+      "statusBarVisibility": "hidden"
     }
+  },
+  "cmake.configureOnEdit": true,
+  "cmake.automaticReconfigure": true,
+  "cmake.configureOnOpen": true,
+  "cmake.generator": "Ninja",
+  "cmake.cmakePath": "${userHome}/.pico-sdk/cmake/v3.31.5/bin/cmake",
+  "C_Cpp.debugShortcut": false,
+  
+  "cmake.configureEnvironment": {
+    "PICO_SDK_PATH": "${workspaceFolder}/Dependencies/pico-sdk"
+  },
+  
+  "terminal.integrated.env.linux": {
+    "PICO_SDK_PATH": "${workspaceFolder}/Dependencies/pico-sdk",
+    "PICO_TOOLCHAIN_PATH": "${env:HOME}/.pico-sdk/toolchain/14_2_Rel1",
+    "PATH": "${env:HOME}/.pico-sdk/toolchain/14_2_Rel1/bin:${env:HOME}/.pico-sdk/cmake/v3.31.5/bin:${env:HOME}/.pico-sdk/ninja/v1.12.1:${env:PATH}"
+  },
+  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+  "C_Cpp.intelliSenseEngine": "default",
+  "C_Cpp.enhancedColorization": "enabled",
+  "editor.semanticHighlighting.enabled": true,
+  "C_Cpp.errorSquiggles": "enabled",
+  "C_Cpp.dimInactiveRegions": false,
+  "C_Cpp.formatting": "vcFormat",
+  
+  // Add compile_commands.json support
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+  
+  "raspberry-pi-pico.cmakeAutoConfigure": false,
+  "raspberry-pi-pico.useCmakeTools": true,
+  "raspberry-pi-pico.cmakePath": "${HOME}/.pico-sdk/cmake/v3.31.5/bin/cmake",
+  "raspberry-pi-pico.ninjaPath": "${HOME}/.pico-sdk/ninja/v1.12.1/ninja",
+  
+  "C_Cpp.default.includePath": [
+    "${workspaceFolder}/**",
+    "${workspaceFolder}/Include/**",
+    "${workspaceFolder}/Dependencies/pico-sdk/**",
+    "${workspaceFolder}/Dependencies/pico-sdk/src/rp2_common/pico_platform/include",
+    "${workspaceFolder}/Dependencies/pico-sdk/src/rp2350/pico_platform/include",
+    "${workspaceFolder}/Dependencies/pico-sdk/src/common/pico_base/include",
+    "${workspaceFolder}/Dependencies/bmm350-sensorapi",
+    "${workspaceFolder}/Dependencies/bmp390-sensorapi"
+  ],
+  "C_Cpp.default.compilerPath": "${env:HOME}/.pico-sdk/toolchain/14_2_Rel1/bin/arm-none-eabi-gcc",
+  "C_Cpp.default.intelliSenseMode": "gcc-arm",
+  "C_Cpp.default.browse.path": [
+    "${workspaceFolder}",
+    "${workspaceFolder}/Dependencies/pico-sdk"
+  ],
+  
+  "files.associations": {
+    "string.h": "c",
+    "bmm350_adapter.h": "c",
+    "scheduler.h": "c",
+    "scheduler_shell_commands.h": "c",
+    "stats.h": "c",
+    "stats_shell_commands.h": "c",
+    "hardware_stats_shell_commands.h": "c",
+    "usb_shell.h": "c",
+    "functional": "c",
+    "scheduler_tz_shell_commands.h": "c",
+    "scheduler_mpu_shell_commands.h": "c",
+    "servo_manager_init.h": "c",
+    "stdlib.h": "c",
+    "stdio.h": "c",
+    "time.h": "c",
+    "vreg.h": "c",
+    "adc.h": "c",
+    "log_manager.h": "c",
+    "servo_manager_shell_commands.h": "c",
+    "set": "c",
+    "format": "c",
+    "scheduler_mpu_tz.h": "c",
+    "scheduler_tz.h": "c",
+    "sync.h": "c",
+    "random": "c"
+  },
+  "sonarlint.pathToCompileCommands": "${workspaceFolder}/build/compile_commands.json",
+  "sonarlint.connectedMode.project": {
+    "projectKey": "RobohandR1"
+  },
+  "sonarlint.rules": {
+    "c:S3806": {
+      "level": "off"
+    }
+  },
+  "sonarlint.output.showAnalyzerLogs": true,
+  "sonarlint.output.showVerboseLogs": true
 }

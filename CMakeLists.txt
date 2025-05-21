@@ -1,9 +1,33 @@
+# == DO NOT EDIT THE FOLLOWING LINES for the Raspberry Pi Pico VS Code Extension to work ==
+if(WIN32)
+    set(USERHOME $ENV{USERPROFILE})
+else()
+    set(USERHOME $ENV{HOME})
+endif()
+set(sdkVersion 2.1.1)
+set(toolchainVersion 14_2_Rel1)
+set(picotoolVersion 2.1.1)
+set(picoVscode ${USERHOME}/.pico-sdk/cmake/pico-vscode.cmake)
+if (EXISTS ${picoVscode})
+    include(${picoVscode})
+endif()
+# ====================================================================================
+
+#
+# @file CMakeLists.txt
+# @brief Build configuration for the robotic hand control system.
+# @author Robert Fudge
+# @date 2025
+# @copyright Apache 2.0 License
+#
+
 cmake_minimum_required(VERSION 3.13)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Ensure compilation happens for the right CPU architecture before including SDK
+set(PICO_SDK_PATH ${CMAKE_CURRENT_LIST_DIR}/Dependencies/pico-sdk)
 set(PICO_BOARD pico2 CACHE STRING "Board type")
 set(PICO_PLATFORM "rp2350-arm-s")
 
@@ -62,33 +86,31 @@ pico_sdk_init()
 # Add executable with our source code
 add_executable(RobohandR1 
     ./Src/main.c
-    
-    ./Src/Core/Stats/hardware_stats.c
-    ./Src/Core/Stats/mem_usage.c
-    ./Src/Core/Stats/stats.c
-
-    ./Src/Core/Scheduler/fault_handlers.c
-    ./Src/Core/Scheduler/log_manager.c
-    ./Src/Core/Scheduler/scheduler.c
-    ./Src/Core/Scheduler/scheduler_tz.c
-    ./Src/Core/Scheduler/scheduler_mpu_tz.c
-    ./Src/Core/Scheduler/sensor_manager_init.c
-    ./Src/Core/Scheduler/system_init.c
-
-    ./Src/Core/Shell/sensor_manager_shell_commands.c
-    ./Src/Core/Shell/hardware_stats_shell_commands.c
-    ./Src/Core/Shell/scheduler_shell_commands.c
-    ./Src/Core/Shell/stats_shell_commands.c
-    ./Src/Core/Shell/usb_shell.c
-    
-    ./Src/Drivers/bmm350_adapter.c
-    ./Src/Drivers/i2c_driver.c
-    ./Src/Drivers/i2c_sensor_adapter.c
-    ./Src/Drivers/sensor_manager.c
 
     ./Dependencies/bmm350-sensorapi/bmm350.c
     ./Dependencies/bmm350-sensorapi/bmm350_oor.c
     ./Dependencies/bmp390-sensorapi/bmp3.c
+
+    ./Src/Drivers/Devices/bmm350_adapter.c
+    ./Src/Drivers/Devices/servo_controller.c
+    ./Src/Drivers/I2C/i2c_driver.c
+    ./Src/Drivers/I2C/i2c_sensor_adapter.c
+
+    ./Src/Kernel/kernel_init.c
+
+    ./Src/Kernel/Manager/interrupt_manager.c
+    ./Src/Kernel/Manager/log_manager.c
+    ./Src/Kernel/Manager/sensor_manager.c
+    ./Src/Kernel/Manager/servo_manager.c
+    ./Src/Kernel/Manager/spinlock_manager.c
+
+    ./Src/Kernel/Scheduler/fault_handlers.c
+    ./Src/Kernel/Scheduler/scheduler.c
+    ./Src/Kernel/Scheduler/scheduler_mpu.c
+    ./Src/Kernel/Scheduler/scheduler_tz.c
+    
+    ./Src/Programs/stats.c
+    ./Src/Programs/usb_shell.c
 )
 
 pico_set_program_name(RobohandR1 "RobohandR1")
@@ -99,20 +121,27 @@ pico_enable_stdio_uart(RobohandR1 0)
 pico_enable_stdio_usb(RobohandR1 1)
 
 # Add standard include directories
-target_include_directories(RobohandR1 PRIVATE
+target_include_directories(RobohandR1 PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}
-    ${CMAKE_CURRENT_LIST_DIR}/Include
-    ${CMAKE_CURRENT_LIST_DIR}/Include/Core
-    ${CMAKE_CURRENT_LIST_DIR}/Include/Core/Scheduler
-    ${CMAKE_CURRENT_LIST_DIR}/Include/Core/Shell
-    ${CMAKE_CURRENT_LIST_DIR}/Include/Core/Stats
-    ${CMAKE_CURRENT_LIST_DIR}/Include/Drivers
     ${CMAKE_CURRENT_LIST_DIR}/Dependencies/bmm350-sensorapi
     ${CMAKE_CURRENT_LIST_DIR}/Dependencies/bmp390-sensorapi
+
+    ${CMAKE_CURRENT_LIST_DIR}/Include
+
+    ${CMAKE_CURRENT_LIST_DIR}/Include/Drivers
+    ${CMAKE_CURRENT_LIST_DIR}/Include/Drivers/Devices
+    ${CMAKE_CURRENT_LIST_DIR}/Include/Drivers/I2C
+    ${CMAKE_CURRENT_LIST_DIR}/Include/Drivers/SPI
+
+    ${CMAKE_CURRENT_LIST_DIR}/Include/Kernel
+    ${CMAKE_CURRENT_LIST_DIR}/Include/Kernel/Manager
+    ${CMAKE_CURRENT_LIST_DIR}/Include/Kernel/Scheduler
+
+    ${CMAKE_CURRENT_LIST_DIR}/Include/Programs
 )
 
 # Use system includes for SDK directories to suppress warnings
-target_include_directories(RobohandR1 SYSTEM PRIVATE
+target_include_directories(RobohandR1 SYSTEM PUBLIC
     ${PICO_SDK_PATH}/src/rp2_common/pico_platform/include
     ${PICO_SDK_PATH}/src/rp2350/pico_platform/include
     ${PICO_SDK_PATH}/src/common/pico_base/include
@@ -196,6 +225,8 @@ target_link_libraries(RobohandR1
     hardware_dma
     hardware_interp
     hardware_i2c
+    hardware_pwm
+    hardware_spi
     hardware_timer
     hardware_watchdog
 )

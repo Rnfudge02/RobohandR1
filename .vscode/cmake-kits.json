@@ -1,15 +1,16 @@
 [
-    {
-        "name": "Pico",
-        "compilers": {
-            "C": "${command:raspberry-pi-pico.getCompilerPath}",
-            "CXX": "${command:raspberry-pi-pico.getCxxCompilerPath}"
-        },
-        "environmentVariables": {
-            "PATH": "${command:raspberry-pi-pico.getEnvPath};${env:PATH}"
-        },
-        "cmakeSettings": {
-            "Python3_EXECUTABLE": "${command:raspberry-pi-pico.getPythonPath}"
-        }
+  {
+    "name": "Pico ARM GCC",
+    "description": "Pico SDK with ARM GCC toolchain",
+    "environmentVariables": {
+      "PICO_SDK_PATH": "${workspaceFolder}/Dependencies/pico-sdk"
+    },
+    "preferredGenerator": {
+      "name": "Ninja"
+    },
+    "cmakeSettings": {
+      "CMAKE_C_COMPILER": "${env:HOME}/.pico-sdk/toolchain/14_2_Rel1/bin/arm-none-eabi-gcc",
+      "CMAKE_CXX_COMPILER": "${env:HOME}/.pico-sdk/toolchain/14_2_Rel1/bin/arm-none-eabi-g++"
     }
+  }
 ]
