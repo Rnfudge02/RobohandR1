@@ -182,7 +182,6 @@ bool interrupt_register(uint32_t irq_num, interrupt_handler_t handler,
  * @return true if successful.
  * @return false if failed.
  */
-__attribute__((section(".time_critical")))
 bool interrupt_register_global_callback(void (*callback)
     (uint32_t event_type, void *context), void *context);
 

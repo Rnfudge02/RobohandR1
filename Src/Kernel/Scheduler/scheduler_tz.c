@@ -15,31 +15,14 @@
 #include "scheduler.h"
 #include "scheduler_tz.h"
 #include "spinlock_manager.h"
-
 #include "usb_shell.h"
-#include "hardware/structs/sio.h"
+
 #include "pico/platform.h"
 #include "pico/time.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-
-/* ARMv8-M TrustZone control registers */
-#define TZ_SAU_CTRL       0xE000EDD0  /* SAU Control Register */
-#define TZ_SAU_TYPE       0xE000EDCC  /* SAU Type Register */
-#define TZ_SAU_RNR        0xE000EDD8  /* SAU Region Number Register */
-#define TZ_SAU_RBAR       0xE000EDDC  /* SAU Region Base Address Register */
-#define TZ_SAU_RLAR       0xE000EDE0  /* SAU Region Limit Address Register */
-#define TZ_NSACR          0xE000ED8C  /* Non-Secure Access Control Register */
-
-/* SAU Control Register bits */
-#define SAU_CTRL_ENABLE   (1 << 0)
-#define SAU_CTRL_ALLNS    (1 << 1)
-
-/* SAU Region Attribute bits */
-#define SAU_REGION_ENABLE (1 << 0)
-#define SAU_REGION_NSC    (1 << 1)  /* Non-Secure Callable */
 
 /* Maximum number of secure functions */
 #define MAX_SECURE_FUNCTIONS 32
@@ -50,13 +33,22 @@
 /* Maximum number of SAU regions */
 #define MAX_SAU_REGIONS 8
 
-/* Spin lock for TrustZone configuration synchronization between cores */
-static uint32_t tz_spinlock_num;
 
-/* Flag indicating hardware support and TrustZone state */
-static bool tz_hardware_supported = false;
-static bool tz_enabled = false;
-static bool tz_globally_enabled = false;
+/* SAU Control Register bits */
+#define SAU_CTRL_ENABLE   (1 << 0)
+#define SAU_CTRL_ALLNS    (1 << 1)
+
+/* SAU Region Attribute bits */
+#define SAU_REGION_ENABLE (1 << 0)
+#define SAU_REGION_NSC    (1 << 1)  /* Non-Secure Callable */
+
+/* ARMv8-M TrustZone control registers */
+#define TZ_SAU_CTRL       0xE000EDD0  /* SAU Control Register */
+#define TZ_SAU_TYPE       0xE000EDCC  /* SAU Type Register */
+#define TZ_SAU_RNR        0xE000EDD8  /* SAU Region Number Register */
+#define TZ_SAU_RBAR       0xE000EDDC  /* SAU Region Base Address Register */
+#define TZ_SAU_RLAR       0xE000EDE0  /* SAU Region Limit Address Register */
+#define TZ_NSACR          0xE000ED8C  /* Non-Secure Access Control Register */
 
 /* Storage for task TrustZone configurations */
 typedef struct {
@@ -67,80 +59,24 @@ typedef struct {
     bool configured;
 } task_tz_state_t;
 
-static task_tz_state_t task_tz_states[MAX_TZ_TASKS];
-static uint8_t num_configured_tz_tasks = 0;
-
-/* Registry of secure functions */
-static secure_function_t secure_function_registry[MAX_SECURE_FUNCTIONS];
-static uint8_t num_registered_functions = 0;
-
-/* Global TZ status */
 static tz_status_info_t global_tz_status = {0};
-static tz_perf_stats_t perf_stats = {0};
-
-/* Caching for last applied TrustZone settings to avoid redundant operations */
-static bool last_task_settings_applied[2] = {false, false};
 static uint32_t last_task_id_applied[2] = {0, 0};
+static bool last_task_settings_applied[2] = {false, false};
+static uint8_t num_configured_tz_tasks = 0;
+static uint8_t num_registered_functions = 0;
+static tz_perf_stats_t perf_stats = {0};
+static secure_function_t secure_function_registry[MAX_SECURE_FUNCTIONS];
+
+static task_tz_state_t task_tz_states[MAX_TZ_TASKS];
+static bool tz_enabled = false;
+static bool tz_globally_enabled = false;
+static bool tz_hardware_supported = false;
+static uint32_t tz_spinlock_num;
+
 
 int cmd_tz(int argc, char *argv[]);
 
 /* Private helper functions */
-
-/**
- * @brief Get task TrustZone state by task ID
- */
-__attribute__((section(".time_critical")))
-static task_tz_state_t* get_task_tz_state(uint32_t task_id) {
-    for (int i = 0; i < num_configured_tz_tasks; i++) {
-        if (task_tz_states[i].task_id == task_id) {
-            return &task_tz_states[i];
-        }
-    }
-    return NULL;
-}
-
-/**
- * @brief Create a new task TrustZone state
- * 
- * This function creates a new TrustZone state entry for a task.
- * It must be called with the spinlock held.
- */
-__attribute__((section(".time_critical")))
-static task_tz_state_t* create_task_tz_state(uint32_t task_id) {
-    if (num_configured_tz_tasks >= MAX_TZ_TASKS) {
-        return NULL;
-    }
-    
-    task_tz_state_t* state = &task_tz_states[num_configured_tz_tasks++];
-    memset(state, 0, sizeof(task_tz_state_t));
-    state->task_id = task_id;
-    state->security_state = TASK_SECURITY_SECURE; // Default to secure
-    state->function_count = 0;
-    state->configured = false;
-    
-    // Update global stats based on security state
-    global_tz_status.secure_tasks++;
-    
-    return state;
-}
-
-/**
- * @brief Check if we're currently in secure state
- * 
- * @return true if in secure state, false if in non-secure state
- */
-__attribute__((section(".time_critical")))
-static bool is_secure_state(void) {
-    // On ARMv8-M, we can check the AIRCR.BFHFNMINS bit
-    // For the RP2350, we'll use a hardware-specific approach
-    
-    // This is a simplified implementation - in a real system,
-    // you would use the proper hardware-specific registers
-    
-    // For now, assume we're always in secure state during initialization
-    return true;
-}
-
 /**
  * @brief Configure SAU (Security Attribution Unit) regions
  * 
@@ -149,7 +85,7 @@ static bool is_secure_state(void) {
  * @param end_addr End address of region (inclusive)
  * @param nsc Whether region is Non-Secure Callable
  */
-__attribute__((section(".time_critical")))
+
 static void configure_sau_region(uint32_t region_num, 
                                void *start_addr, 
                                void *end_addr, 
@@ -182,15 +118,63 @@ static void configure_sau_region(uint32_t region_num,
     );
 }
 
-/* Public API implementation */
+/**
+ * @brief Create a new task TrustZone state
+ * 
+ * This function creates a new TrustZone state entry for a task.
+ * It must be called with the spinlock held.
+ */
 
-bool scheduler_tz_is_supported(void) {
-    // Read the SAU Type register to check if TrustZone is supported
-    uint32_t sau_type = *(io_ro_32*)(TZ_SAU_TYPE);
+static task_tz_state_t* create_task_tz_state(uint32_t task_id) {
+    if (num_configured_tz_tasks >= MAX_TZ_TASKS) {
+        return NULL;
+    }
     
-    // If SAU Type is zero, TrustZone is not supported
-    return (sau_type != 0);
+    task_tz_state_t* state = &task_tz_states[num_configured_tz_tasks++];
+    memset(state, 0, sizeof(task_tz_state_t));
+    state->task_id = task_id;
+    state->security_state = TASK_SECURITY_SECURE; // Default to secure
+    state->function_count = 0;
+    state->configured = false;
+    
+    // Update global stats based on security state
+    global_tz_status.secure_tasks++;
+    
+    return state;
 }
+
+/**
+ * @brief Get task TrustZone state by task ID
+ */
+
+static task_tz_state_t* get_task_tz_state(uint32_t task_id) {
+    for (int i = 0; i < num_configured_tz_tasks; i++) {
+        if (task_tz_states[i].task_id == task_id) {
+            return &task_tz_states[i];
+        }
+    }
+    return NULL;
+}
+
+/**
+ * @brief Check if we're currently in secure state
+ * 
+ * @return true if in secure state, false if in non-secure state
+ */
+
+static bool is_secure_state(void) {
+    // On ARMv8-M, we can check the AIRCR.BFHFNMINS bit
+    // For the RP2350, we'll use a hardware-specific approach
+    
+    // This is a simplified implementation - in a real system,
+    // you would use the proper hardware-specific registers
+    
+    // For now, assume we're always in secure state during initialization
+    return true;
+}
+
+
+/* Public API implementation */
 
 bool scheduler_tz_init(void) {
     tz_spinlock_num = hw_spinlock_allocate(SPINLOCK_CAT_SCHEDULER, "scheduler_tz");
@@ -214,7 +198,7 @@ bool scheduler_tz_init(void) {
     global_tz_status.available = tz_hardware_supported;
     
     if (!tz_hardware_supported) {
-        LOG_WARN("Trustzone Init", "TrustZone not supported on this hardware.");
+        log_message(LOG_LEVEL_WARN, "Trustzone Init", "TrustZone not supported on this hardware.");
         return false;
     }
     
@@ -252,11 +236,93 @@ bool scheduler_tz_init(void) {
     global_tz_status.enabled = true;
     
     return true;
-    LOG_INFO("Trustzone Init", "TrustZone not supported on this hardware.");
+    log_message(LOG_LEVEL_INFO, "Trustzone Init", "TrustZone not supported on this hardware.");
 }
 
 bool scheduler_tz_is_enabled(void) {
     return tz_hardware_supported && tz_enabled && tz_globally_enabled;
+}
+
+
+bool scheduler_tz_is_supported(void) {
+    // Read the SAU Type register to check if TrustZone is supported
+    uint32_t sau_type = *(io_ro_32*)(TZ_SAU_TYPE);
+    
+    // If SAU Type is zero, TrustZone is not supported
+    return (sau_type != 0);
+}
+
+
+bool scheduler_tz_apply_task_settings(uint32_t task_id) {
+    uint64_t start_time = time_us_64();
+    
+    // Skip if TrustZone is not supported or enabled
+    if (!tz_hardware_supported || !tz_enabled || !tz_globally_enabled) {
+        return true;
+    }
+    
+    // Check if we've already applied settings for this task on this core
+    uint8_t core = (uint8_t) (get_core_num() & 0xFF);
+    if (last_task_settings_applied[core] && last_task_id_applied[core] == task_id) {
+        return true;
+    }
+    
+    // Try to find the task state without locking first
+    task_tz_state_t* state = get_task_tz_state(task_id);    // NOSONAR - state is reassigned below
+    if (!state || !state->configured) {
+        return true;  // No configuration - use defaults (remain in secure state)
+    }
+    
+    uint32_t owner_irq = hw_spinlock_acquire(tz_spinlock_num, scheduler_get_current_task());
+    
+    // Find task configuration again with lock held
+    state = get_task_tz_state(task_id);
+    
+    if (!state || !state->configured) {
+        hw_spinlock_release(tz_spinlock_num, owner_irq);
+        return true;  // No configuration - use defaults
+    }
+    
+    // Apply security state transition if needed
+    task_security_state_t current_state = scheduler_tz_get_security_state();
+    
+    if (state->security_state != current_state) {
+        // Need to transition security state
+        
+        // In a real implementation, this would involve:
+        // 1. Saving current context
+        // 2. Setting up transition parameters
+        // 3. Executing transition instruction (if needed)
+        
+        // For development purposes, just log the transition
+        log_message(LOG_LEVEL_INFO, "Trustzone", "Task %lu transitioning from %s to %s state.",
+            task_id,
+            current_state == TASK_SECURITY_SECURE ? "secure" : "non-secure",
+            state->security_state == TASK_SECURITY_SECURE ? "secure" : "non-secure");
+        
+        // Update performance stats
+        perf_stats.state_transition_count++;
+        
+        // Update global status
+        global_tz_status.current_state = state->security_state;
+    }
+    
+    // Remember that we've applied settings for this task
+    last_task_settings_applied[core] = true;
+    last_task_id_applied[core] = task_id;
+    
+    // Update performance statistics
+    uint64_t time_taken = time_us_64() - start_time;
+    perf_stats.apply_settings_count++;
+    perf_stats.total_apply_time_us += time_taken;
+    if (time_taken > perf_stats.max_apply_time_us) {
+        perf_stats.max_apply_time_us = time_taken;
+    }
+    
+    // Release spinlock
+    hw_spinlock_release(tz_spinlock_num, owner_irq);
+    
+    return true;
 }
 
 bool scheduler_tz_configure_task(const task_tz_config_t *config) {
@@ -330,77 +396,7 @@ bool scheduler_tz_configure_task(const task_tz_config_t *config) {
     return true;
 }
 
-bool scheduler_tz_apply_task_settings(uint32_t task_id) {
-    uint64_t start_time = time_us_64();
-    
-    // Skip if TrustZone is not supported or enabled
-    if (!tz_hardware_supported || !tz_enabled || !tz_globally_enabled) {
-        return true;
-    }
-    
-    // Check if we've already applied settings for this task on this core
-    uint8_t core = (uint8_t) (get_core_num() & 0xFF);
-    if (last_task_settings_applied[core] && last_task_id_applied[core] == task_id) {
-        return true;
-    }
-    
-    // Try to find the task state without locking first
-    task_tz_state_t* state = get_task_tz_state(task_id);    // NOSONAR - state is reassigned below
-    if (!state || !state->configured) {
-        return true;  // No configuration - use defaults (remain in secure state)
-    }
-    
-    uint32_t owner_irq = hw_spinlock_acquire(tz_spinlock_num, scheduler_get_current_task());
-    
-    // Find task configuration again with lock held
-    state = get_task_tz_state(task_id);
-    
-    if (!state || !state->configured) {
-        hw_spinlock_release(tz_spinlock_num, owner_irq);
-        return true;  // No configuration - use defaults
-    }
-    
-    // Apply security state transition if needed
-    task_security_state_t current_state = scheduler_tz_get_security_state();
-    
-    if (state->security_state != current_state) {
-        // Need to transition security state
-        
-        // In a real implementation, this would involve:
-        // 1. Saving current context
-        // 2. Setting up transition parameters
-        // 3. Executing transition instruction (if needed)
-        
-        // For development purposes, just log the transition
-        LOG_INFO("Trustzone", "Task %lu transitioning from %s to %s state.",
-            task_id,
-            current_state == TASK_SECURITY_SECURE ? "secure" : "non-secure",
-            state->security_state == TASK_SECURITY_SECURE ? "secure" : "non-secure");
-        
-        // Update performance stats
-        perf_stats.state_transition_count++;
-        
-        // Update global status
-        global_tz_status.current_state = state->security_state;
-    }
-    
-    // Remember that we've applied settings for this task
-    last_task_settings_applied[core] = true;
-    last_task_id_applied[core] = task_id;
-    
-    // Update performance statistics
-    uint64_t time_taken = time_us_64() - start_time;
-    perf_stats.apply_settings_count++;
-    perf_stats.total_apply_time_us += time_taken;
-    if (time_taken > perf_stats.max_apply_time_us) {
-        perf_stats.max_apply_time_us = time_taken;
-    }
-    
-    // Release spinlock
-    hw_spinlock_release(tz_spinlock_num, owner_irq);
-    
-    return true;
-}
+
 
 bool scheduler_tz_reset_task_settings(uint32_t task_id) {
     uint64_t start_time = time_us_64();
@@ -425,7 +421,7 @@ bool scheduler_tz_reset_task_settings(uint32_t task_id) {
         // 3. Executing transition instruction
         
         // For development purposes, just log the transition
-        LOG_INFO("Trustzone", "Resetting to secure state from task %lu.", task_id);
+        log_message(LOG_LEVEL_INFO, "Trustzone", "Resetting to secure state from task %lu.", task_id);
         
         // Update performance stats
         perf_stats.state_transition_count++;
@@ -455,8 +451,7 @@ task_security_state_t scheduler_tz_get_security_state(void) {
 }
 
 bool scheduler_tz_register_secure_function(const char *name, 
-                                          void *secure_function,
-                                          void **non_secure_callable) {
+    void *secure_function, void **non_secure_callable) {
     if (!name || !secure_function || !non_secure_callable) {
         return false;
     }

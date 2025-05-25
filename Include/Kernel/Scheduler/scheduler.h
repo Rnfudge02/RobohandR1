@@ -255,6 +255,7 @@ typedef struct {
  * );
  * @endcode
  */
+__attribute__((section(".time_critical")))
 int scheduler_create_task(task_func_t function, void *params, uint32_t stack_size,
     task_priority_t priority, const char *name, uint8_t core_affinity, task_type_t type);
 
@@ -268,6 +269,7 @@ int scheduler_create_task(task_func_t function, void *params, uint32_t stack_siz
  * 
  * @warning Cannot delete currently running task.
  */
+__attribute__((section(".time_critical")))
 bool scheduler_delete_task(int task_id);
 
 /**
@@ -280,6 +282,7 @@ bool scheduler_delete_task(int task_id);
  * 
  * @note This is a blocking delay for the calling task only.
  */
+__attribute__((section(".time_critical")))
 void scheduler_delay(uint32_t ms);
 
 /**
@@ -292,6 +295,7 @@ void scheduler_delay(uint32_t ms);
  * 
  * @note Tracing may impact system performance.
  */
+__attribute__((section(".time_critical")))
 void scheduler_enable_tracing(bool enable);
 
 /**
@@ -301,6 +305,7 @@ void scheduler_enable_tracing(bool enable);
  * 
  * @return Current task ID, or -1 if called from non-task context.
  */
+__attribute__((section(".time_critical")))
 int scheduler_get_current_task(void);
 
 /**
@@ -309,6 +314,7 @@ int scheduler_get_current_task(void);
  * @param core Core number (0 or 1).
  * @return Pointer to current task, or NULL if no task running.
  */
+__attribute__((section(".time_critical")))
 task_control_block_t* scheduler_get_current_task_ptr(uint8_t core);
 
 /**
@@ -318,6 +324,7 @@ task_control_block_t* scheduler_get_current_task_ptr(uint8_t core);
 * @param info Pointer to deadline_info_t to fill.
 * @return true if successful, false otherwise.
 */
+__attribute__((section(".time_critical")))
 bool scheduler_get_deadline_info(int task_id, deadline_info_t *info);
 
 /**
@@ -335,6 +342,7 @@ bool scheduler_get_deadline_info(int task_id, deadline_info_t *info);
  * }
  * @endcode
  */
+__attribute__((section(".time_critical")))
 bool scheduler_get_stats(scheduler_stats_t *stats);
 
 /**
@@ -346,6 +354,7 @@ bool scheduler_get_stats(scheduler_stats_t *stats);
  * @param tcb     Pointer to TCB structure to fill.
  * @return true if task found and info retrieved, false otherwise.
  */
+__attribute__((section(".time_critical")))
 bool scheduler_get_task_info(int task_id, task_control_block_t *tcb);
 
 /**
@@ -379,6 +388,7 @@ bool scheduler_init(void);
  * @pre Task must be in SUSPENDED state.
  * @post Task returns to READY state.
  */
+__attribute__((section(".time_critical")))
 bool scheduler_resume_task(int task_id);
 
 /**
@@ -396,6 +406,7 @@ bool scheduler_resume_task(int task_id);
  * }
  * @endcode
  */
+__attribute__((section(".time_critical")))
 void scheduler_run_pending_tasks(void);
 
 /**
@@ -405,6 +416,7 @@ void scheduler_run_pending_tasks(void);
  * @param task Pointer to task to set as current.
  * @return true if successful, false otherwise.
  */
+__attribute__((section(".time_critical")))
 bool scheduler_set_current_task_ptr(uint8_t core, task_control_block_t* task);
 
 /**
@@ -417,6 +429,7 @@ bool scheduler_set_current_task_ptr(uint8_t core, task_control_block_t* task);
  * @param execution_budget_us Maximum execution time budget. (us)
  * @return true if successful, false otherwise.
  */
+__attribute__((section(".time_critical")))
 bool scheduler_set_deadline(int task_id, deadline_type_t type, 
     uint32_t period_ms, uint32_t deadline_ms,
     uint32_t execution_budget_us);
@@ -430,6 +443,7 @@ bool scheduler_set_deadline(int task_id, deadline_type_t type,
 * @param handler Function to call on deadline miss.
 * @return true if successful, false otherwise.
 */
+__attribute__((section(".time_critical")))
 bool scheduler_set_deadline_miss_handler(int task_id, 
     void (*handler)(uint32_t task_id));
 
@@ -448,6 +462,7 @@ bool scheduler_set_deadline_miss_handler(int task_id,
  * @post Task is created and ready to be scheduled.
  * 
  */
+__attribute__((section(".time_critical")))
 bool scheduler_set_mpu_protection(int task_id, void *stack_start, size_t stack_size,
     void *code_start, size_t code_size);
 
@@ -486,6 +501,7 @@ void scheduler_stop(void);
  * 
  * @post Task will not be scheduled until resumed.
  */
+__attribute__((section(".time_critical")))
 bool scheduler_suspend_task(int task_id);
 
 /**
@@ -503,6 +519,7 @@ bool scheduler_suspend_task(int task_id);
  * }
  * @endcode
  */
+__attribute__((section(".time_critical")))
 void scheduler_yield(void);
 
 /** @} */ //end of scheduler_api group

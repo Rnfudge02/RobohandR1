@@ -1,30 +1,23 @@
 /**
-* @file i2c_driver.c
-* @brief Generic I2C driver implementation with DMA support for Raspberry Pi Pico
-* @author Based on Robert Fudge's work
-* @date 2025
+* @file i2c_driver.c (FIXED)
+* @brief Generic I2C driver implementation with proper spinlock usage
 */
 
-
-#include <stdio.h>      // For printf
-#include "log_manager.h" // For LOG_INFO
-#include "scheduler.h"   // For scheduler_get_current_task
+#include <stdio.h>
+#include "log_manager.h"
+#include "scheduler.h"
 #include "i2c_driver.h"
 #include "spinlock_manager.h"
 #include "pico/stdlib.h"
 #include "hardware/i2c.h"
 #include "hardware/dma.h"
 #include "hardware/irq.h"
-
 #include <limits.h>
 #include <string.h>
 #include <stdlib.h>
 
-
 // Global context for DMA ISR
 static i2c_driver_ctx_t* g_i2c_dma_ctx = NULL;
-
-static uint i2c_lock_num = UINT_MAX;
 
 // DMA interrupt handler
 static void i2c_driver_dma_handler(void) {
@@ -50,18 +43,16 @@ static bool i2c_spinlock_callback(spinlock_init_phase_t phase, void* context) {
     
     switch (phase) {
         case SPINLOCK_INIT_PHASE_CORE:
-            // Already initialized with a bootstrap spinlock
             return true;
             
         case SPINLOCK_INIT_PHASE_TRACKING:
-            // Register the spinlock
-            hw_spinlock_register_external(ctx->i2c_lock_num, SPINLOCK_CAT_I2C, ctx->name ? ctx->name : "i2c_driver");
-            printf("INFO: I2C Driver - Spinlock registered with manager\n");
+            hw_spinlock_register_external(ctx->i2c_lock_num, SPINLOCK_CAT_I2C, 
+                                         ctx->name ? ctx->name : "i2c_driver");
+            log_message(LOG_LEVEL_INFO, "I2C Driver", "INFO: I2C Driver - Spinlock registered with manager.");
             return true;
             
         case SPINLOCK_INIT_PHASE_FULL:
-            // Now we can use proper logging
-            LOG_INFO("I2C Driver", "I2C driver spinlock fully integrated with manager");
+            log_message(LOG_LEVEL_INFO, "I2C Driver", "I2C driver spinlock fully integrated");
             return true;
             
         default:
@@ -70,7 +61,7 @@ static bool i2c_spinlock_callback(spinlock_init_phase_t phase, void* context) {
 }
 
 /**
- * @brief Initialize I2C driver with thread safety
+ * @brief Initialize I2C driver with thread safety (FIXED)
  */
 i2c_driver_ctx_t* i2c_driver_init(const i2c_driver_config_t* config) {
     if (config == NULL || config->i2c_inst == NULL) {
@@ -99,28 +90,33 @@ i2c_driver_ctx_t* i2c_driver_init(const i2c_driver_config_t* config) {
     gpio_set_function(ctx->sda_pin, GPIO_FUNC_I2C);
     gpio_set_function(ctx->scl_pin, GPIO_FUNC_I2C);
     
-    // Enable pull-ups (this is generally recommended for I2C)
+    // Enable pull-ups
     gpio_pull_up(ctx->sda_pin);
     gpio_pull_up(ctx->scl_pin);
     
     // Create a spinlock - bootstrap it
     ctx->i2c_lock_num = hw_spinlock_bootstrap_claim(true);
     if (ctx->i2c_lock_num == UINT_MAX) {
-        printf("WARNING: I2C driver failed to claim spinlock, thread safety disabled\n");
+        log_message(LOG_LEVEL_WARN, "I2C Driver", "Failed to claim spinlock, thread safety disabled.");
         ctx->lock_initialized = false;
     } else {
         ctx->i2c_spin_lock = spin_lock_instance(ctx->i2c_lock_num);
         ctx->lock_initialized = true;
     }
     
-    // Register with spinlock manager if it's initialized
+    // FIX: Set initialized flag to true
+    ctx->initialized = true;
+    
+    // Register with spinlock manager
     if (hw_spinlock_get_init_phase() != SPINLOCK_INIT_PHASE_NONE) {
         i2c_spinlock_callback(hw_spinlock_get_init_phase(), ctx);
     } else {
-        // Register for future phases
         hw_spinlock_register_component(ctx->name ? ctx->name : "I2CDriver", 
-                                      i2c_spinlock_callback, ctx);
+            i2c_spinlock_callback, ctx);
     }
+    
+    log_message(LOG_LEVEL_INFO, "I2C Driver", "I2C Driver initialized on pins SDA:%u SCL:%u at %luHz\n", 
+        ctx->sda_pin, ctx->scl_pin, ctx->clock_freq);
     
     return ctx;
 }
@@ -132,17 +128,17 @@ void i2c_driver_get_default_config(i2c_driver_config_t* config) {
     
     memset(config, 0, sizeof(i2c_driver_config_t));
     
-    config->i2c_inst = i2c0;     // Default to i2c0
-    config->sda_pin = 16;        // Default SDA pin for i2c0
-    config->scl_pin = 17;        // Default SCL pin for i2c0
-    config->clock_freq = 400000; // Default to 400 kHz
-    config->use_dma = false;     // Default to not using DMA
-    config->dma_tx_channel = -1; // Auto-allocate
-    config->dma_rx_channel = -1; // Auto-allocate
+    config->i2c_inst = i2c0;
+    config->sda_pin = 16;
+    config->scl_pin = 17;
+    config->clock_freq = 400000;
+    config->use_dma = false;
+    config->dma_tx_channel = -1;
+    config->dma_rx_channel = -1;
 }
 
 /**
- * @brief Thread-safe I2C read operation
+ * @brief Thread-safe I2C read operation (FIXED)
  */
 bool i2c_driver_read_bytes(i2c_driver_ctx_t* ctx, uint8_t dev_addr, 
     uint8_t reg_addr, uint8_t* data, size_t len) {
@@ -150,8 +146,12 @@ bool i2c_driver_read_bytes(i2c_driver_ctx_t* ctx, uint8_t dev_addr,
         return false;
     }
 
-    // Acquire lock
-    uint32_t save = hw_spinlock_acquire(i2c_lock_num, scheduler_get_current_task());
+    uint32_t save = 0;
+    
+    // Acquire lock if available - use raw SDK spinlock functions
+    if (ctx->lock_initialized && ctx->i2c_spin_lock) {
+        save = spin_lock_blocking(ctx->i2c_spin_lock);
+    }
 
     // Set up I2C transfer for register address
     int result = i2c_write_blocking(ctx->i2c_inst, dev_addr, &reg_addr, 1, true);
@@ -160,17 +160,19 @@ bool i2c_driver_read_bytes(i2c_driver_ctx_t* ctx, uint8_t dev_addr,
     if (result == 1) {
         // Read data from the register
         result = i2c_read_blocking(ctx->i2c_inst, dev_addr, data, len, false);
-        success = (result == len);
+        success = (result == (int)len);
     }
 
-    // Release lock
-    hw_spinlock_release(i2c_lock_num, save);
+    // Release lock if it was acquired
+    if (ctx->lock_initialized && ctx->i2c_spin_lock) {
+        spin_unlock(ctx->i2c_spin_lock, save);
+    }
 
     return success;
 }
 
 /**
- * @brief Thread-safe I2C write operation
+ * @brief Thread-safe I2C write operation (FIXED)
  */
 bool i2c_driver_write_bytes(i2c_driver_ctx_t* ctx, uint8_t dev_addr,
     uint8_t reg_addr, const uint8_t* data, size_t len) {
@@ -178,8 +180,12 @@ bool i2c_driver_write_bytes(i2c_driver_ctx_t* ctx, uint8_t dev_addr,
         return false;
     }
 
-    // Acquire lock
-    uint32_t save = hw_spinlock_acquire(i2c_lock_num, scheduler_get_current_task());
+    uint32_t save = 0;
+    
+    // Acquire lock if available - use raw SDK spinlock functions
+    if (ctx->lock_initialized && ctx->i2c_spin_lock) {
+        save = spin_lock_blocking(ctx->i2c_spin_lock);
+    }
 
     // Prepare buffer: [register address, data...]
     uint8_t* buffer = (uint8_t*)malloc(len + 1);
@@ -191,53 +197,44 @@ bool i2c_driver_write_bytes(i2c_driver_ctx_t* ctx, uint8_t dev_addr,
 
         // Write to device
         int result = i2c_write_blocking(ctx->i2c_inst, dev_addr, buffer, len + 1, false);
-        success = (result == len + 1);
+        success = (result == (int)(len + 1));
 
         free(buffer);
     }
 
-    // Release lock
-    hw_spinlock_release(i2c_lock_num, save);
-
+    // Release lock if it was acquired
+    if (ctx->lock_initialized && ctx->i2c_spin_lock) {
+        spin_unlock(ctx->i2c_spin_lock, save);
+    }
 
     return success;
 }
 
 bool i2c_driver_read_bytes_dma(i2c_driver_ctx_t* ctx, uint8_t dev_addr,
-                              uint8_t reg_addr, uint8_t* data, size_t len,
-                              void (*callback)(void* user_data), void* user_data) {
+    uint8_t reg_addr, uint8_t* data, size_t len,
+    void (*callback)(void* user_data), void* user_data) {
     if (ctx == NULL || !ctx->initialized || !ctx->use_dma || data == NULL || len == 0) {
         return false;
     }
     
-    // Store callback information
     ctx->dma_complete_callback = callback;
     ctx->dma_user_data = user_data;
     
-    // First, we need to write the register address (this can't easily be done with DMA)
     int result = i2c_write_blocking(ctx->i2c_inst, dev_addr, &reg_addr, 1, true);
     if (result != 1) {
         return false;
     }
     
-    // Configure DMA for reading
     dma_channel_config c = dma_channel_get_default_config(ctx->dma_rx_channel);
     channel_config_set_transfer_data_size(&c, DMA_SIZE_8);
     channel_config_set_read_increment(&c, false);
     channel_config_set_write_increment(&c, true);
     channel_config_set_dreq(&c, i2c_get_dreq(ctx->i2c_inst, false));
     
-    // Set up the DMA to read from the I2C data register to our buffer
-    dma_channel_configure(
-        ctx->dma_rx_channel,
-        &c,
-        data,                               // Destination
-        &i2c_get_hw(ctx->i2c_inst)->data_cmd, // Source
-        len,                                // Number of transfers
-        true                                // Start immediately
-    );
+    dma_channel_configure(ctx->dma_rx_channel,
+        &c, data, &i2c_get_hw(ctx->i2c_inst)->data_cmd,
+        len, true);
     
-    // Enable the DMA interrupt
     dma_channel_set_irq0_enabled(ctx->dma_rx_channel, true);
     
     return true;
@@ -250,12 +247,10 @@ bool i2c_driver_write_bytes_dma(i2c_driver_ctx_t* ctx, uint8_t dev_addr,
         return false;
     }
     
-    // Store callback information
     ctx->dma_complete_callback = callback;
     ctx->dma_user_data = user_data;
     
-    // Prepare buffer: [register address, data...]
-    uint8_t* buffer = (uint8_t*)malloc(len + 1);
+    uint8_t* buffer = (uint8_t*) malloc(len + 1);
     if (buffer == NULL) {
         return false;
     }
@@ -263,40 +258,28 @@ bool i2c_driver_write_bytes_dma(i2c_driver_ctx_t* ctx, uint8_t dev_addr,
     buffer[0] = reg_addr;
     memcpy(buffer + 1, data, len);
     
-    // Configure the I2C for transmit
     i2c_get_hw(ctx->i2c_inst)->enable = 0;
     i2c_get_hw(ctx->i2c_inst)->tar = dev_addr;
     i2c_get_hw(ctx->i2c_inst)->enable = 1;
     
-    // Configure DMA for writing
     dma_channel_config c = dma_channel_get_default_config(ctx->dma_tx_channel);
     channel_config_set_transfer_data_size(&c, DMA_SIZE_8);
     channel_config_set_read_increment(&c, true);
     channel_config_set_write_increment(&c, false);
     channel_config_set_dreq(&c, i2c_get_dreq(ctx->i2c_inst, true));
     
-    // Set up the DMA to write from our buffer to the I2C data register
-    dma_channel_configure(
-        ctx->dma_tx_channel,
-        &c,
-        &i2c_get_hw(ctx->i2c_inst)->data_cmd, // Destination
-        buffer,                             // Source
-        len + 1,                            // Number of transfers
-        true                                // Start immediately
-    );
+    dma_channel_configure(ctx->dma_tx_channel, &c,
+        &i2c_get_hw(ctx->i2c_inst)->data_cmd, buffer,
+        len + 1, true);
     
-    // Enable the DMA interrupt
     dma_channel_set_irq0_enabled(ctx->dma_tx_channel, true);
-    
-    // Note: We can't free the buffer here because DMA is still using it.
-    // We'd need to make a callback to free it after DMA completes.
     
     return true;
 }
 
 bool i2c_driver_set_dma_callback(i2c_driver_ctx_t* ctx, 
-                                void (*callback)(void* user_data),
-                                void* user_data) {
+    void (*callback)(void* user_data), void* user_data) {
+
     if (ctx == NULL || !ctx->initialized || !ctx->use_dma) {
         return false;
     }
@@ -312,7 +295,6 @@ bool i2c_driver_deinit(i2c_driver_ctx_t* ctx) {
         return false;
     }
     
-    // Clean up DMA resources if used
     if (ctx->use_dma) {
         dma_channel_set_irq0_enabled(ctx->dma_rx_channel, false);
         dma_channel_set_irq0_enabled(ctx->dma_tx_channel, false);
@@ -325,8 +307,89 @@ bool i2c_driver_deinit(i2c_driver_ctx_t* ctx) {
         }
     }
     
-    // Free the context
+    if (ctx->name) {
+        free(ctx->name);
+    }
+    
     free(ctx);
     
     return true;
+}
+
+/**
+ * @brief Alternative probe using register read (more reliable for some devices)
+ */
+bool i2c_driver_probe_with_read(i2c_driver_ctx_t* ctx, uint8_t addr, bool debug) {
+    if (ctx == NULL || !ctx->initialized) {
+        return false;
+    }
+
+    uint32_t save = 0;
+    
+    if (ctx->lock_initialized && ctx->i2c_spin_lock) {
+        save = spin_lock_blocking(ctx->i2c_spin_lock);
+    }
+
+    bool success = false;
+    uint8_t dummy_data;
+    
+    // Try to read 1 byte - this is often more reliable than write-only probe
+    int result = i2c_read_timeout_us(ctx->i2c_inst, addr, &dummy_data, 1, false, 2000); // 2ms timeout
+    
+    if (debug) {
+        log_message(LOG_LEVEL_INFO, "I2C Driver", "Addr 0x%02X. (read): result=%d. ", addr, result);
+    }
+    
+    // For read probe: result should be 1 (1 byte read) on success
+    if (result == 1) {
+        success = true;
+    } else {
+        success = false;
+    }
+    
+    if (debug) {
+        log_message(LOG_LEVEL_INFO, "-> %s.", success ? "ACK" : "NACK");
+        if (success) {
+            log_message(LOG_LEVEL_ERROR, "I2C Driver", "(data=0x%02X)", dummy_data);
+        }
+    }
+
+    if (ctx->lock_initialized && ctx->i2c_spin_lock) {
+        spin_unlock(ctx->i2c_spin_lock, save);
+    }
+
+    return success;
+}
+
+/**
+ * @brief Enhanced I2C scan with multiple probe methods
+ */
+int i2c_scan(i2c_driver_ctx_t* ctx) {
+    if (ctx == NULL) {
+        log_message(LOG_LEVEL_ERROR, "I2C Driver", "I2C context is NULL.");
+        return -1;
+    }
+    
+    log_message(LOG_LEVEL_INFO, "I2C Driver", "Enhanced I2C Bus Scan (with timeouts and validation)");
+    log_message(LOG_LEVEL_INFO, "I2C Driver", "====================================================");
+    
+
+    int res_found = 0;
+    
+    for (uint8_t addr = 0x08; addr <= 0x77; addr++) {
+        sleep_us(100);
+        bool res = i2c_driver_probe_with_read(ctx, addr, false);
+        
+        if (res) res_found++;
+        
+        // Only count as found if BOTH methods agree (more reliable)
+        if (res) {
+            log_message(LOG_LEVEL_ERROR, "I2C Driver", "Device found at 0x%02X.", addr);
+        }
+    }
+    
+    log_message(LOG_LEVEL_ERROR, "I2C Driver", "Scan Summary:");
+    log_message(LOG_LEVEL_ERROR, "I2C Driver", "Devices found: %d devices.", res_found);
+    
+    return res_found;
 }

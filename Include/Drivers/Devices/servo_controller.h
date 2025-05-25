@@ -68,6 +68,7 @@ void servo_controller_get_default_config(servo_config_t* config);
  * @param position Position in degrees
  * @return true if position was set successfully, false otherwise
  */
+__attribute__((section(".time_critical")))
 bool servo_controller_set_position(servo_controller_t controller, float position);
 
 /**
@@ -77,6 +78,7 @@ bool servo_controller_set_position(servo_controller_t controller, float position
  * @param percentage Position as percentage (0.0 to 100.0)
  * @return true if position was set successfully, false otherwise
  */
+__attribute__((section(".time_critical")))
 bool servo_controller_set_position_percent(servo_controller_t controller, float percentage);
 
 /**
@@ -86,6 +88,7 @@ bool servo_controller_set_position_percent(servo_controller_t controller, float 
  * @param pulse_us Pulse width in microseconds
  * @return true if pulse width was set successfully, false otherwise
  */
+__attribute__((section(".time_critical")))
 bool servo_controller_set_pulse(servo_controller_t controller, uint pulse_us);
 
 /**
@@ -95,6 +98,7 @@ bool servo_controller_set_pulse(servo_controller_t controller, uint pulse_us);
  * @param speed Speed value (-100.0 to 100.0 percent)
  * @return true if speed was set successfully, false otherwise
  */
+__attribute__((section(".time_critical")))
 bool servo_controller_set_speed(servo_controller_t controller, float speed);
 
 /**
@@ -106,6 +110,7 @@ bool servo_controller_set_speed(servo_controller_t controller, float speed);
  * @param speed_deg_per_sec Speed in degrees per second
  * @return true if sweep was configured successfully, false otherwise
  */
+__attribute__((section(".time_critical")))
 bool servo_controller_configure_sweep(servo_controller_t controller, 
     float min_pos, float max_pos, float speed_deg_per_sec);
 
@@ -116,6 +121,7 @@ bool servo_controller_configure_sweep(servo_controller_t controller,
  * @param mode Operation mode
  * @return true if mode was set successfully, false otherwise
  */
+__attribute__((section(".time_critical")))
 bool servo_controller_set_mode(servo_controller_t controller, servo_mode_t mode);
 
 /**
@@ -124,6 +130,7 @@ bool servo_controller_set_mode(servo_controller_t controller, servo_mode_t mode)
  * @param controller Servo controller handle
  * @return Current position in degrees
  */
+__attribute__((section(".time_critical")))
 float servo_controller_get_position(servo_controller_t controller);
 
 /**
@@ -132,6 +139,7 @@ float servo_controller_get_position(servo_controller_t controller);
  * @param controller Servo controller handle
  * @return Current pulse width in microseconds
  */
+__attribute__((section(".time_critical")))
 uint servo_controller_get_pulse(servo_controller_t controller);
 
 /**
@@ -141,6 +149,7 @@ uint servo_controller_get_pulse(servo_controller_t controller);
  * 
  * @param controller Servo controller handle
  */
+__attribute__((section(".time_critical")))
 void servo_controller_task(void* controller);
 
 /**
@@ -173,6 +182,7 @@ bool servo_controller_destroy(servo_controller_t controller);
  * @param controller Servo controller handle
  * @return Current servo mode
  */
+__attribute__((section(".time_critical")))
 servo_mode_t servo_controller_get_mode(servo_controller_t controller);
 
 /**
@@ -181,6 +191,7 @@ servo_mode_t servo_controller_get_mode(servo_controller_t controller);
  * @param controller Servo controller handle
  * @return GPIO pin number
  */
+__attribute__((section(".time_critical")))
 uint servo_controller_get_gpio_pin(servo_controller_t controller);
 
 #ifdef __cplusplus

@@ -93,6 +93,9 @@ void i2c_driver_get_default_config(i2c_driver_config_t* config);
  */
 i2c_driver_ctx_t* i2c_driver_init(const i2c_driver_config_t* config);
 
+
+bool i2c_driver_probe_address(i2c_driver_ctx_t* ctx, uint8_t addr);
+
 /**
  * @brief Read bytes from an I2C device.
  * 
@@ -103,6 +106,7 @@ i2c_driver_ctx_t* i2c_driver_init(const i2c_driver_config_t* config);
  * @param len Number of bytes to read.
  * @return true if successful, false otherwise.
  */
+__attribute__((section(".time_critical")))
 bool i2c_driver_read_bytes(i2c_driver_ctx_t* ctx, uint8_t dev_addr, 
     uint8_t reg_addr, uint8_t* data, size_t len);
 
@@ -118,6 +122,7 @@ bool i2c_driver_read_bytes(i2c_driver_ctx_t* ctx, uint8_t dev_addr,
  * @param user_data User data to pass to callback.
  * @return true if the DMA transfer was initiated successfully, false otherwise.
  */
+__attribute__((section(".time_critical")))
 bool i2c_driver_read_bytes_dma(i2c_driver_ctx_t* ctx, uint8_t dev_addr,
     uint8_t reg_addr, uint8_t* data, size_t len,
     void (*callback)(void* user_data), void* user_data);
@@ -143,6 +148,7 @@ bool i2c_driver_set_dma_callback(i2c_driver_ctx_t* ctx,
  * @param len Number of bytes to write.
  * @return true if successful, false otherwise.
  */
+__attribute__((section(".time_critical")))
 bool i2c_driver_write_bytes(i2c_driver_ctx_t* ctx, uint8_t dev_addr,
     uint8_t reg_addr, const uint8_t* data, size_t len);
 
@@ -158,11 +164,18 @@ bool i2c_driver_write_bytes(i2c_driver_ctx_t* ctx, uint8_t dev_addr,
  * @param user_data User data to pass to callback.
  * @return true if the DMA transfer was initiated successfully, false otherwise.
  */
+__attribute__((section(".time_critical")))
 bool i2c_driver_write_bytes_dma(i2c_driver_ctx_t* ctx, uint8_t dev_addr,
     uint8_t reg_addr, const uint8_t* data, size_t len,
     void (*callback)(void* user_data), void* user_data);
 
 /** @} */ // end of i2c_api group
+
+/**
+ * @brief Enhanced I2C scan with multiple probe methods
+ */
+__attribute__((section(".time_critical")))
+int i2c_scan(i2c_driver_ctx_t* ctx);
 
 #ifdef __cplusplus
 }

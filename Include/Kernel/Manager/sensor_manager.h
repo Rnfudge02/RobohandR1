@@ -177,6 +177,7 @@ bool sensor_manager_register_callback(sensor_manager_t manager,
  * @param mode Power mode to set.
  * @return true if mode was set successfully, false otherwise.
  */
+__attribute__((section(".time_critical")))
 bool sensor_manager_set_power_mode(sensor_manager_t manager, sensor_type_t type, sensor_power_mode_t mode);
 
 /**
@@ -187,6 +188,7 @@ bool sensor_manager_set_power_mode(sensor_manager_t manager, sensor_type_t type,
  * @param rate Data rate to set.
  * @return true if rate was set successfully, false otherwise.
  */
+__attribute__((section(".time_critical")))
 bool sensor_manager_set_rate(sensor_manager_t manager, sensor_type_t type, sensor_rate_t rate);
 
 /**

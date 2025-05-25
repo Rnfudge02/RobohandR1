@@ -43,27 +43,37 @@
 
 // Internal configuration and state
 typedef struct {
-    log_config_t config;
-    uint8_t* buffer;
     uint32_t buffer_head;
     uint32_t buffer_tail;
     uint32_t buffer_count;
     uint32_t sequence_counter;
+    uint32_t log_lock_num;
+
+    uint32_t console_head;
+    uint32_t console_tail;
+    uint32_t console_count;
+    uint32_t console_buffer_size;
+    uint32_t console_lock_num;
+
+    uint32_t flash_write_offset;
+
+    log_level_t current_levels[3];  // Console, SD card, Flash
+
+    mutex_t fallback_mutex;
+    log_config_t config;
+
+
     uint8_t active_destinations;
     
-    // Safe locking mechanism with fallback
-    bool using_spinlocks;
-    uint32_t log_lock_num;
-    spin_lock_t* log_spin_lock;
-    uint32_t console_lock_num;
-    spin_lock_t* console_spin_lock;
-    mutex_t fallback_mutex;
-    
-    log_level_t current_levels[3];  // Console, SD card, Flash
-    char* temp_buffer;
-    uint32_t flash_write_offset;
-    bool initialized;
     bool fully_initialized;
+    bool initialized;
+    bool using_spinlocks;
+    
+    uint8_t* buffer;
+    uint8_t* console_buffer;
+    char* temp_buffer;
+    
+    
 } log_state_t;
 
 // Global logging state
@@ -106,7 +116,7 @@ bool log_init_as_task(void) {
     g_log_task_id = scheduler_create_task(
         log_scheduler_task,     // Task function
         NULL,                   // No parameters
-        10240,                   // Stack size
+        2048,                   // Stack size
         TASK_PRIORITY_HIGH,     // High priority for reliability
         "log_task",             // Task name
         0,                      // Core 0 for logging
@@ -122,54 +132,305 @@ bool log_init_as_task(void) {
     return true;
 }
 
-void log_scheduler_task(void* params) {
-    (void)params;  // Unused
+/**
+ * @brief Check if log processing should be performed
+ * 
+ * Determines whether the logging system is ready to process messages
+ * based on initialization status and buffer content.
+ * 
+ * @return true if processing should proceed, false otherwise
+ */
+static bool should_process_logs(void) {
+    return (log_state.initialized && log_state.buffer_count > 4);
+}
+
+/**
+ * @brief Extract message length from the log buffer
+ * 
+ * Reads a 4-byte message length from the front of the circular buffer.
+ * The length is stored in big-endian format.
+ * 
+ * @param[out] msg_len Pointer to store the extracted message length
+ * @return true if length extracted successfully, false on insufficient data
+ * 
+ * @note This function modifies buffer_tail and buffer_count
+ * @note Caller must hold the log lock before calling this function
+ */
+static bool extract_message_length(uint32_t *msg_len) {
+    if (!msg_len || log_state.buffer_count < 4) {
+        return false;
+    }
     
-    // Process pending log messages - this is now called regularly by the scheduler
-    if (log_state.initialized && log_state.buffer_count > 0) {
-        // Process at most 2 messages per task execution to maintain responsiveness
-        for (int i = 0; i < 2 && log_state.buffer_count > 4; i++) {
-            // Extract a message from the buffer and process it
-            uint32_t save = log_acquire_lock();
-            
-            // Get message length
-            uint32_t msg_len = 0;
-            for (int j = 0; j < 4 && log_state.buffer_count > j; j++) {
-                msg_len = (msg_len << 8) | log_state.buffer[log_state.buffer_tail];
-                log_state.buffer_tail = (log_state.buffer_tail + 1) % log_state.config.buffer_size;
-                log_state.buffer_count--;
-            }
-            
-            // Safety check on message length
-            if (msg_len == 0 || msg_len > log_state.config.max_message_size) {
-                // Invalid length - reset buffer and exit
-                log_state.buffer_head = 0;
-                log_state.buffer_tail = 0;
-                log_state.buffer_count = 0;
-                log_release_lock(save);
-                break;
-            }
-            
-            // Extract message
-            char msg_buffer[DEFAULT_MAX_MESSAGE_SIZE];
-            for (size_t j = 0; j < msg_len && j < sizeof(msg_buffer) - 1; j++) {
-                msg_buffer[j] = log_state.buffer[log_state.buffer_tail];
-                log_state.buffer_tail = (log_state.buffer_tail + 1) % log_state.config.buffer_size;
-                log_state.buffer_count--;
-            }
-            msg_buffer[msg_len < sizeof(msg_buffer) - 1 ? msg_len : sizeof(msg_buffer) - 2] = '\0';
-            
-            log_release_lock(save);
-            
-            // Now output to destinations (without holding lock)
-            if (log_state.active_destinations & LOG_DEST_SDCARD) {
-                log_write_sdcard(msg_buffer);
-            }
-            
-            if (log_state.active_destinations & LOG_DEST_FLASH) {
-                log_write_flash(msg_buffer);
-            }
+    *msg_len = 0;
+    for (int i = 0; i < 4; i++) {
+        *msg_len = (*msg_len << 8) | log_state.buffer[log_state.buffer_tail];
+        log_state.buffer_tail = (log_state.buffer_tail + 1) % log_state.config.buffer_size;
+        log_state.buffer_count--;
+    }
+    
+    return true;
+}
+
+/**
+ * @brief Validate extracted message length
+ * 
+ * Checks if the message length is within acceptable bounds.
+ * 
+ * @param[in] msg_len Message length to validate
+ * @return true if length is valid, false otherwise
+ */
+static bool is_valid_message_length(uint32_t msg_len) {
+    return (msg_len > 0 && msg_len <= log_state.config.max_message_size);
+}
+
+/**
+ * @brief Reset log buffer to empty state
+ * 
+ * Clears the circular buffer by resetting head, tail, and count to zero.
+ * This is typically called when an invalid message is detected.
+ * 
+ * @note Caller must hold the log lock before calling this function
+ */
+static void reset_log_buffer(void) {
+    log_state.buffer_head = 0;
+    log_state.buffer_tail = 0;
+    log_state.buffer_count = 0;
+}
+
+/**
+ * @brief Extract message content from the log buffer
+ * 
+ * Reads message content from the circular buffer into a local buffer.
+ * The message is null-terminated and truncated if it exceeds buffer size.
+ * 
+ * @param[in] msg_len Length of message to extract
+ * @param[out] msg_buffer Buffer to store the extracted message
+ * @param[in] buffer_size Size of the destination buffer
+ * @return Number of bytes actually extracted
+ * 
+ * @note This function modifies buffer_tail and buffer_count
+ * @note Caller must hold the log lock before calling this function
+ */
+static size_t extract_message_content(uint32_t msg_len, char *msg_buffer, size_t buffer_size) {
+    if (!msg_buffer || buffer_size == 0) {
+        return 0;
+    }
+    
+    size_t max_extract = (buffer_size > 1) ? (buffer_size - 1) : 0;
+    size_t bytes_to_extract = (msg_len < max_extract) ? msg_len : max_extract;
+    
+    for (size_t i = 0; i < bytes_to_extract && log_state.buffer_count > 0; i++) {
+        msg_buffer[i] = log_state.buffer[log_state.buffer_tail];
+        log_state.buffer_tail = (log_state.buffer_tail + 1) % log_state.config.buffer_size;
+        log_state.buffer_count--;
+    }
+    
+    // Null-terminate the message
+    size_t null_pos = (bytes_to_extract < max_extract) ? bytes_to_extract : max_extract;
+    msg_buffer[null_pos] = '\0';
+    
+    return bytes_to_extract;
+}
+
+/**
+ * @brief Output message to all active log destinations
+ * 
+ * Writes the message to each enabled logging destination (SD card, flash, etc.).
+ * This function operates without holding locks to avoid blocking.
+ * 
+ * @param[in] message Null-terminated message string to output
+ * 
+ * @note This function should be called without holding the log lock
+ */
+static void output_message_to_destinations(const char *message) {
+    if (!message) {
+        return;
+    }
+    
+    if (log_state.active_destinations & LOG_DEST_SDCARD) {
+        log_write_sdcard(message);
+    }
+    
+    if (log_state.active_destinations & LOG_DEST_FLASH) {
+        log_write_flash(message);
+    }
+}
+
+/**
+ * @brief Process a single log message from the buffer
+ * 
+ * Extracts one complete message from the log buffer, validates it,
+ * and outputs it to all active destinations.
+ * 
+ * @return true if message processed successfully, false on error or invalid message
+ * 
+ * @note Returns false on invalid message length, causing buffer reset
+ */
+static bool process_single_message(void) {
+    // Check if we have enough data for at least length + some content
+    if (log_state.buffer_count <= 4) {
+        return false;
+    }
+    
+    uint32_t save = log_acquire_lock();
+    
+    // Extract message length
+    uint32_t msg_len;
+    if (!extract_message_length(&msg_len)) {
+        log_release_lock(save);
+        return false;
+    }
+    
+    // Validate message length
+    if (!is_valid_message_length(msg_len)) {
+        // Invalid length - reset buffer and exit
+        reset_log_buffer();
+        log_release_lock(save);
+        return false;
+    }
+    
+    // Extract message content
+    char msg_buffer[DEFAULT_MAX_MESSAGE_SIZE];
+    size_t extracted = extract_message_content(msg_len, msg_buffer, sizeof(msg_buffer));
+    
+    log_release_lock(save);
+    
+    // Output message to destinations (without holding lock)
+    if (extracted > 0) {
+        output_message_to_destinations(msg_buffer);
+        return true;
+    }
+    
+    return false;
+}
+
+/**
+ * @brief Process multiple log messages with rate limiting
+ * 
+ * Processes up to a maximum number of messages per call to maintain
+ * system responsiveness. This implements rate limiting for log processing.
+ * 
+ * @param[in] max_messages Maximum number of messages to process in this call
+ */
+static void process_pending_messages(int max_messages) {
+    int processed = 0;
+    
+    while (processed < max_messages && should_process_logs()) {
+        if (!process_single_message()) {
+            break;  // Stop on error or invalid message
         }
+        processed++;
+    }
+}
+
+static bool process_single_console_message(void) {
+    if (log_state.console_count < 4) {
+        return false;
+    }
+
+    uint32_t save = console_acquire_lock();
+
+    // Extract message length
+    uint32_t msg_len = 0;
+    for (int i = 0; i < 4; i++) {
+        msg_len = (msg_len << 8) | log_state.console_buffer[log_state.console_tail];
+        log_state.console_tail = (log_state.console_tail + 1) % log_state.console_buffer_size;
+        log_state.console_count--;
+    }
+
+    // Validate message length
+    if (msg_len == 0 || msg_len > (log_state.config.max_message_size + 1)) {
+        log_state.console_head = 0;
+        log_state.console_tail = 0;
+        log_state.console_count = 0;
+        console_release_lock(save);
+        return false;
+    }
+
+    if (log_state.console_count < msg_len) {
+        log_state.console_head = 0;
+        log_state.console_tail = 0;
+        log_state.console_count = 0;
+        console_release_lock(save);
+        return false;
+    }
+
+    // Extract message
+    char *msg = malloc(msg_len + 1);
+    if (!msg) {
+        console_release_lock(save);
+        return false;
+    }
+
+    for (size_t i = 0; i < msg_len; i++) {
+        msg[i] = log_state.console_buffer[log_state.console_tail];
+        log_state.console_tail = (log_state.console_tail + 1) % log_state.console_buffer_size;
+        log_state.console_count--;
+    }
+    msg[msg_len] = '\0';
+
+    console_release_lock(save);
+
+    // Output to console
+    printf("%s", msg); // msg includes '\n'
+    fflush(stdout);
+    free(msg);
+
+    return true;
+}
+
+static void process_console_messages(int max_messages) {
+    int processed = 0;
+    while (processed < max_messages && log_state.console_count > 0) {
+        if (!process_single_console_message()) {
+            break;
+        }
+        processed++;
+    }
+}
+
+
+
+
+/**
+ * @brief Scheduler task for processing log messages
+ * 
+ * This task is called regularly by the scheduler to process pending log messages
+ * from the circular buffer. It implements rate limiting to maintain system
+ * responsiveness by processing at most 2 messages per execution.
+ * 
+ * The task performs the following operations:
+ * 1. Checks if log processing should be performed
+ * 2. Processes up to 2 messages per execution
+ * 3. For each message: extracts length, validates it, extracts content, and outputs
+ * 4. Resets buffer on invalid messages to prevent corruption
+ * 
+ * @param[in] params Task parameters (unused, marked as void to avoid warnings)
+ * 
+ * @note This function is designed to be non-blocking and responsive
+ * @note Invalid messages cause the entire buffer to be reset for safety
+ * @note Lock is released before writing to destinations to prevent blocking
+ * 
+ * @see process_single_message() for individual message processing
+ * @see output_message_to_destinations() for destination handling
+ */
+void log_flush(void) {
+    if (!log_state.initialized) {
+        return;
+    }
+
+    // Flush main buffer
+    while (log_state.buffer_count > 0) {
+        log_process();
+    }
+
+    // Flush console buffer if USB is connected
+    if (stdio_usb_connected()) {
+        uint32_t save = console_acquire_lock();
+        while (log_state.console_count > 0) {
+            process_single_console_message();
+        }
+        console_release_lock(save);
     }
 }
 
@@ -226,6 +487,19 @@ bool log_init_core(const log_config_t* config) {
     log_state.buffer_tail = 0;
     log_state.buffer_count = 0;
     log_state.sequence_counter = 0;
+
+    // Allocate console buffer
+    log_state.console_buffer_size = DEFAULT_BUFFER_SIZE;
+    log_state.console_buffer = malloc(log_state.console_buffer_size);
+    if (log_state.console_buffer == NULL) {
+        free(log_state.buffer);
+        free(log_state.temp_buffer);
+        return false;
+    }
+
+    log_state.console_head = 0;
+    log_state.console_tail = 0;
+    log_state.console_count = 0;
     
     // Set default levels
     log_state.current_levels[0] = log_state.config.console_level;
@@ -280,7 +554,7 @@ bool log_init_spinlocks(void) {
     log_state.using_spinlocks = true;
     log_state.fully_initialized = true;
     
-    LOG_INFO("LogMgr", "Logging system fully initialized with spinlocks");
+    log_message(LOG_LEVEL_INFO, "LogMgr", "Logging system fully initialized with spinlocks");
     
     return true;
 }
@@ -308,7 +582,7 @@ bool log_init(const log_config_t* config) {
 /**
  * @brief Add a log message to the buffer
  */
-__attribute__((section(".time_critical")))
+
 void log_message(log_level_t level, const char* module, const char* format, ...) {  // NOSONAR - Simplest implementation
     // Early exit if not initialized or level not sufficient for any output
     if (!log_state.initialized) {
@@ -316,7 +590,7 @@ void log_message(log_level_t level, const char* module, const char* format, ...)
         va_list args;
         va_start(args, format);
         printf("[%s] [%s] ", log_level_to_string(level), module);
-        vprintf(format, args);
+        vprintf(format, args);                                          // NOSONAR - Simplest implementation
         printf("\n");
         va_end(args);
         return;
@@ -325,7 +599,7 @@ void log_message(log_level_t level, const char* module, const char* format, ...)
     // Format the message
     va_list args;
     va_start(args, format);
-    vsnprintf(log_state.temp_buffer, log_state.config.max_message_size, format, args);
+    vsnprintf(log_state.temp_buffer, log_state.config.max_message_size, format, args);  // NOSONAR - Simplest implementation
     va_end(args);
     
     // Create message and format it
@@ -377,25 +651,57 @@ void log_message(log_level_t level, const char* module, const char* format, ...)
            "%s", 
            message.message);
     
-    // Console output is still direct for responsiveness
-    if ((log_state.active_destinations & LOG_DEST_CONSOLE) && 
-        level >= log_state.current_levels[0]) {
-        
-        // Use spinlock manager for atomic console output
+    if ((log_state.active_destinations & LOG_DEST_CONSOLE) && level >= log_state.current_levels[0]) {
         uint32_t console_save = console_acquire_lock();
-        
-        if (log_state.config.color_output) {
-            printf("%s%s%s\n", 
-                   log_level_to_color(message.level), 
-                   formatted_message, 
-                   ANSI_COLOR_RESET);
+
+        if (stdio_usb_connected()) {
+            // Print directly if USB is connected
+            if (log_state.config.color_output) {
+                printf("%s%s%s\n", log_level_to_color(message.level), formatted_message, ANSI_COLOR_RESET);
+            } else {
+                printf("%s\n", formatted_message);
+            }
+            fflush(stdout);
         } else {
-            printf("%s\n", formatted_message);
+            // Buffer the message with newline
+            size_t msg_len = strlen(formatted_message);
+            size_t total_len = msg_len + 1; // +1 for '\n'
+            uint32_t required_space = 4 + total_len;
+
+            if (log_state.console_count + required_space <= log_state.console_buffer_size) {
+                // Write 4-byte length (big-endian)
+                uint32_t len = total_len;
+                for (int i = 0; i < 4; i++) {
+                    log_state.console_buffer[log_state.console_head] = (len >> (24 - i * 8)) & 0xFF;
+                    log_state.console_head = (log_state.console_head + 1) % log_state.console_buffer_size;
+                    log_state.console_count++;
+                }
+
+                // Write message content
+                for (size_t i = 0; i < msg_len; i++) {
+                    log_state.console_buffer[log_state.console_head] = formatted_message[i];
+                    log_state.console_head = (log_state.console_head + 1) % log_state.console_buffer_size;
+                    log_state.console_count++;
+                }
+
+                // Add newline
+                log_state.console_buffer[log_state.console_head] = '\n';
+                log_state.console_head = (log_state.console_head + 1) % log_state.console_buffer_size;
+                log_state.console_count++;
+            } else {
+                // Handle overflow
+                static uint32_t overflow_count = 0;
+                if (++overflow_count % 100 == 1) {
+                    // Attempt to log overflow (may fail if buffer full)
+                    char overflow_msg[64];
+                    snprintf(overflow_msg, sizeof(overflow_msg), 
+                            "WARNING: Console buffer overflow (%lu messages dropped)", overflow_count);
+                    // Add to main log buffer if possible
+                    log_message(LOG_LEVEL_WARN, "LogMgr", overflow_msg);
+                }
+            }
         }
-        
-        // Ensure output is visible immediately
-        fflush(stdout);
-        
+
         console_release_lock(console_save);
     }
     
@@ -452,7 +758,7 @@ void log_message(log_level_t level, const char* module, const char* format, ...)
 /**
  * @brief Get default logging configuration
  */
-__attribute__((section(".time_critical")))
+
 void log_get_default_config(log_config_t* config) {
     if (config == NULL) {
         return;
@@ -460,7 +766,7 @@ void log_get_default_config(log_config_t* config) {
     
     memset(config, 0, sizeof(log_config_t));
     
-    config->console_level = LOG_LEVEL_INFO;
+    config->console_level = LOG_LEVEL_DEBUG;
     config->sdcard_level = LOG_LEVEL_DEBUG;
     config->flash_level = LOG_LEVEL_ERROR;
     config->buffer_size = DEFAULT_BUFFER_SIZE;
@@ -477,7 +783,7 @@ void log_get_default_config(log_config_t* config) {
 /**
  * @brief Set the global logging level
  */
-__attribute__((section(".time_critical")))
+
 void log_set_level(log_level_t level, log_destination_t destination) {
     uint32_t save = hw_spinlock_acquire(log_state.log_lock_num, scheduler_get_current_task());
     
@@ -500,7 +806,7 @@ void log_set_level(log_level_t level, log_destination_t destination) {
 /**
  * @brief Set log output destinations
  */
-__attribute__((section(".time_critical")))
+
 void log_set_destinations(uint8_t destinations) {
     uint32_t save = hw_spinlock_acquire(log_state.log_lock_num, scheduler_get_current_task());
     log_state.active_destinations = destinations;
@@ -510,7 +816,7 @@ void log_set_destinations(uint8_t destinations) {
 /**
  * @brief Add a log message to the buffer
  */
-__attribute__((section(".time_critical")))
+
 
 
 
@@ -518,7 +824,7 @@ __attribute__((section(".time_critical")))
 /**
  * @brief Process and output pending log messages
  */
-__attribute__((section(".time_critical")))
+
 void log_process(void) {
     if (!log_state.initialized) {
         return;
@@ -583,22 +889,31 @@ void log_process(void) {
 /**
  * @brief Flush all pending log messages
  */
-__attribute__((section(".time_critical")))
+
 void log_flush(void) {
     if (!log_state.initialized) {
         return;
     }
-    
-    // Process all pending messages
+
+    // Flush main buffer
     while (log_state.buffer_count > 0) {
         log_process();
+    }
+
+    // Flush console buffer if USB is connected
+    if (stdio_usb_connected()) {
+        uint32_t save = console_acquire_lock();
+        while (log_state.console_count > 0) {
+            process_single_console_message();
+        }
+        console_release_lock(save);
     }
 }
 
 /**
  * @brief Write message to console
  */
-__attribute__((section(".time_critical")))
+
 static void log_write_console(const log_message_t* message, const char* formatted_message) {
     // Acquire console lock for atomic printing
     uint32_t save = console_acquire_lock();
@@ -655,7 +970,7 @@ static void log_write_sdcard(const char* formatted_message) {
 /**
  * @brief Write message to flash
  */
-__attribute__((section(".time_critical")))
+
 static void log_write_flash(const char* formatted_message) {
     // Check if we have enough space in flash
     size_t msg_len = strlen(formatted_message) + 1;  // Include null terminator
@@ -698,7 +1013,7 @@ static void log_write_flash(const char* formatted_message) {
 /**
  * @brief Convert log level to string
  */
-__attribute__((section(".time_critical")))
+
 static const char* log_level_to_string(log_level_t level) {
     switch (level) {
         case LOG_LEVEL_TRACE: return "TRACE";
@@ -714,7 +1029,7 @@ static const char* log_level_to_string(log_level_t level) {
 /**
  * @brief Convert log level to ANSI color code
  */
-__attribute__((section(".time_critical")))
+
 static const char* log_level_to_color(log_level_t level) {
     switch (level) {
         case LOG_LEVEL_TRACE: return ANSI_COLOR_BLUE;

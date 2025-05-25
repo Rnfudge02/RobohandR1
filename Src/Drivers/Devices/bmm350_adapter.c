@@ -4,17 +4,22 @@
 * @date 2025-05-13
 */
 
+#include "log_manager.h"
+#include "sensor_manager.h"
 #include "bmm350_adapter.h"
 #include "i2c_driver.h"
 #include "pico/stdlib.h"
 #include <stdlib.h>
 #include <string.h>
 
+static void bmm350_adapter_task_inner_checks(uint32_t current_time, bmm350_task_tcb_t* tcb);
+
 // I2C communication functions for BMM350 driver
 static int8_t bmm350_i2c_read(uint8_t reg_addr, uint8_t *reg_data, uint32_t len, void *intf_ptr) {
     bmm350_task_tcb_t* tcb = (bmm350_task_tcb_t*)intf_ptr;
     
     if (tcb == NULL || tcb->params.i2c_ctx == NULL) {
+        log_message(LOG_LEVEL_ERROR, "BMM350", "I2C Read: NULL pointer");
         return BMM350_E_NULL_PTR;
     }
     
@@ -26,6 +31,12 @@ static int8_t bmm350_i2c_read(uint8_t reg_addr, uint8_t *reg_data, uint32_t len,
         len
     );
     
+    // Debug logging for first few bytes
+    if (len > 0 && reg_data != NULL) {
+        log_message(LOG_LEVEL_DEBUG, "BMM350", "I2C Read: addr=0x%02X, reg=0x%02X, len=%d, success=%d, data[0]=0x%02X", 
+                    tcb->params.device_addr, reg_addr, len, success, reg_data[0]);
+    }
+    
     return success ? BMM350_OK : BMM350_E_COM_FAIL;
 }
 
@@ -33,6 +44,7 @@ static int8_t bmm350_i2c_write(uint8_t reg_addr, const uint8_t *reg_data, uint32
     bmm350_task_tcb_t* tcb = (bmm350_task_tcb_t*)intf_ptr;
     
     if (tcb == NULL || tcb->params.i2c_ctx == NULL) {
+        log_message(LOG_LEVEL_ERROR, "BMM350", "I2C Write: NULL pointer");
         return BMM350_E_NULL_PTR;
     }
     
@@ -44,8 +56,12 @@ static int8_t bmm350_i2c_write(uint8_t reg_addr, const uint8_t *reg_data, uint32
         len
     );
     
+    log_message(LOG_LEVEL_DEBUG, "BMM350", "I2C Write: addr=0x%02X, reg=0x%02X, len=%d, success=%d", 
+                tcb->params.device_addr, reg_addr, len, success);
+    
     return success ? BMM350_OK : BMM350_E_COM_FAIL;
 }
+
 
 static void delay_us_tcb(uint32_t period, void *intf_ptr) {
    (void) intf_ptr;
@@ -72,6 +88,9 @@ static void bmm350_dma_callback(void* user_data) {
 // Internal function to initialize the BMM350 device
 static int8_t bmm350_adapter_init_device(bmm350_task_tcb_t* tcb) {
     int8_t rslt;
+    uint8_t chip_id = 0;
+    
+    log_message(LOG_LEVEL_INFO, "BMM350", "Starting device initialization...");
     
     // Initialize device structure
     tcb->dev.intf_ptr = tcb;
@@ -82,18 +101,29 @@ static int8_t bmm350_adapter_init_device(bmm350_task_tcb_t* tcb) {
     // Initialize BMM350
     rslt = bmm350_init(&tcb->dev);
     if (rslt != BMM350_OK) {
+        log_message(LOG_LEVEL_ERROR, "BMM350", "Init failed with code: %d", rslt);
         return rslt;
+    }
+    log_message(LOG_LEVEL_INFO, "BMM350", "Basic init successful");
+    
+    // Read and verify chip ID
+    rslt = bmm350_get_regs(BMM350_REG_CHIP_ID, &chip_id, 1, &tcb->dev);
+    if (rslt == BMM350_OK) {
+        log_message(LOG_LEVEL_INFO, "BMM350", "Chip ID: 0x%02X (expected: 0x33)", chip_id);
     }
     
     // Configure interrupts
     rslt = bmm350_configure_interrupt(BMM350_LATCHED, BMM350_ACTIVE_HIGH, BMM350_INT_OD_PUSHPULL, BMM350_ENABLE, &tcb->dev);
     if (rslt != BMM350_OK) {
+        log_message(LOG_LEVEL_ERROR, "BMM350", "Configure interrupt failed: %d", rslt);
         return rslt;
     }
+    log_message(LOG_LEVEL_INFO, "BMM350", "Interrupt configured");
     
     // Enable data ready interrupt
     rslt = bmm350_enable_interrupt(BMM350_ENABLE_INTERRUPT, &tcb->dev);
     if (rslt != BMM350_OK) {
+        log_message(LOG_LEVEL_ERROR, "BMM350", "Enable interrupt failed: %d", rslt);
         return rslt;
     }
     
@@ -104,8 +134,10 @@ static int8_t bmm350_adapter_init_device(bmm350_task_tcb_t* tcb) {
         &tcb->dev
     );
     if (rslt != BMM350_OK) {
+        log_message(LOG_LEVEL_ERROR, "BMM350", "Set ODR failed: %d", rslt);
         return rslt;
     }
+    log_message(LOG_LEVEL_INFO, "BMM350", "ODR set to 25Hz");
     
     // Enable all axes
     rslt = bmm350_enable_axes(
@@ -115,14 +147,17 @@ static int8_t bmm350_adapter_init_device(bmm350_task_tcb_t* tcb) {
         &tcb->dev
     );
     if (rslt != BMM350_OK) {
+        log_message(LOG_LEVEL_ERROR, "BMM350", "Enable axes failed: %d", rslt);
         return rslt;
     }
     
     // Set power mode to normal
     rslt = bmm350_set_powermode(BMM350_NORMAL_MODE, &tcb->dev);
     if (rslt != BMM350_OK) {
+        log_message(LOG_LEVEL_ERROR, "BMM350", "Set power mode failed: %d", rslt);
         return rslt;
     }
+    log_message(LOG_LEVEL_INFO, "BMM350", "Device initialization complete");
     
     return BMM350_OK;
 }
@@ -204,35 +239,7 @@ void bmm350_adapter_task(void* task_data) {
             break;
             
         case BMM350_TASK_STATE_RUNNING:
-            // Check if it's time for a new sample
-            if ((current_time - tcb->last_sample_time) >= tcb->params.sampling_rate_ms) {
-                
-                int8_t rslt;
-                uint8_t int_status = 0;
-                
-                // Get data ready interrupt status
-                rslt = bmm350_get_regs(BMM350_REG_INT_STATUS, &int_status, 1, &tcb->dev);
-                
-                // If data is ready or we're polling
-                if (rslt == BMM350_OK && (int_status & BMM350_DRDY_DATA_REG_MSK)) {
-                    // Read magnetometer data
-                    
-                    rslt = bmm350_get_compensated_mag_xyz_temp_data(&tcb->mag_data, &tcb->dev);
-                    
-                    if (rslt == BMM350_OK) {
-                        // Update last sample time and data ready flag
-                        tcb->last_sample_time = current_time;
-                        tcb->data_ready = true;
-                        tcb->error_count = 0;  // Reset error counter on success
-                    } else {
-                        tcb->error_count++;
-                        if (tcb->error_count > 10) {
-                            // After multiple failures, go to error state
-                            tcb->state = BMM350_TASK_STATE_ERROR;
-                        }
-                    }
-                }
-            }
+            bmm350_adapter_task_inner_checks(current_time, tcb);
             break;
             
         case BMM350_TASK_STATE_ERROR:
@@ -250,6 +257,52 @@ void bmm350_adapter_task(void* task_data) {
         case BMM350_TASK_STATE_SUSPENDED:
             // Nothing to do in suspended state
             break;
+    }
+}
+
+// Modify bmm350_adapter_task_inner_checks function:
+static void bmm350_adapter_task_inner_checks(uint32_t current_time, bmm350_task_tcb_t* tcb) {
+    if ((current_time - tcb->last_sample_time) >= tcb->params.sampling_rate_ms) {
+        int8_t rslt;
+        uint8_t int_status = 0;
+        
+        // Get data ready interrupt status
+        rslt = bmm350_get_regs(BMM350_REG_INT_STATUS, &int_status, 1, &tcb->dev);
+        
+        // If data is ready or we're polling
+        if (rslt == BMM350_OK && (int_status & BMM350_DRDY_DATA_REG_MSK)) {
+            // Read magnetometer data
+            rslt = bmm350_get_compensated_mag_xyz_temp_data(&tcb->mag_data, &tcb->dev);
+            
+            if (rslt == BMM350_OK) {
+                // Update last sample time and data ready flag
+                tcb->last_sample_time = current_time;
+                tcb->data_ready = true;
+                tcb->error_count = 0;
+                
+                // Transfer data to sensor adapter
+                if (tcb->sensor_adapter != NULL) {
+                    sensor_data_t sensor_data;
+                    sensor_data.xyz.x = tcb->mag_data.x;
+                    sensor_data.xyz.y = tcb->mag_data.y;
+                    sensor_data.xyz.z = tcb->mag_data.z;
+                    sensor_data.timestamp = (float) get_absolute_time();
+                    
+                    // Update the adapter with new data
+                    i2c_sensor_adapter_update_data(
+                        (i2c_sensor_adapter_t)tcb->sensor_adapter, 
+                        &sensor_data
+                    );
+                }
+                
+                return;
+            }
+            
+            tcb->error_count++;
+            if (tcb->error_count > 10) {
+                tcb->state = BMM350_TASK_STATE_ERROR;
+            }
+        }
     }
 }
 
@@ -287,7 +340,13 @@ bool bmm350_adapter_stop(bmm350_task_tcb_t* tcb) {
 }
 
 bool bmm350_adapter_get_data(bmm350_task_tcb_t* tcb, struct bmm350_mag_temp_data* mag_data) {
-    if (tcb == NULL || mag_data == NULL || !tcb->data_ready) {
+    if (tcb == NULL || mag_data == NULL) {
+        return false;
+    }
+    
+    // Only return data if it's fresh
+    if (!tcb->data_ready) {
+        log_message(LOG_LEVEL_DEBUG, "BMM350", "No new data available");
         return false;
     }
     
@@ -296,6 +355,9 @@ bool bmm350_adapter_get_data(bmm350_task_tcb_t* tcb, struct bmm350_mag_temp_data
     
     // Reset data ready flag
     tcb->data_ready = false;
+    
+    log_message(LOG_LEVEL_DEBUG, "BMM350", "Data retrieved: X=%.2f, Y=%.2f, Z=%.2f", 
+                mag_data->x, mag_data->y, mag_data->z);
     
     return true;
 }

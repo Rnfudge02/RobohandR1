@@ -114,6 +114,7 @@ typedef struct {
  * @return true if settings applied successfully.
  * @return false if settings could not be applied.
  */
+__attribute__((section(".time_critical")))
 bool scheduler_tz_apply_task_settings(uint32_t task_id);
 
 /**
@@ -123,6 +124,7 @@ bool scheduler_tz_apply_task_settings(uint32_t task_id);
  * @return true if configuration successful.
  * @return false if configuration failed.
  */
+__attribute__((section(".time_critical")))
 bool scheduler_tz_configure_task(const task_tz_config_t *config);
 
 /**
@@ -131,6 +133,7 @@ bool scheduler_tz_configure_task(const task_tz_config_t *config);
  * @param stats Output parameter to store statistics.
  * @return true on success, false on failure.
  */
+__attribute__((section(".time_critical")))
 bool scheduler_tz_get_performance_stats(tz_perf_stats_t *stats);
 
 /**
@@ -138,6 +141,7 @@ bool scheduler_tz_get_performance_stats(tz_perf_stats_t *stats);
  * 
  * @return Current security state. (secure or non-secure)
  */
+__attribute__((section(".time_critical")))
 task_security_state_t scheduler_tz_get_security_state(void);
 
 /**
@@ -146,6 +150,7 @@ task_security_state_t scheduler_tz_get_security_state(void);
  * @param status Output parameter to store status information.
  * @return true on success, false on failure.
  */
+__attribute__((section(".time_critical")))
 bool scheduler_tz_get_status(tz_status_info_t *status);
 
 /**
@@ -165,6 +170,7 @@ bool scheduler_tz_init(void);
  * @return true if TrustZone is enabled.
  * @return false if TrustZone is not enabled.
  */
+__attribute__((section(".time_critical")))
 bool scheduler_tz_is_enabled(void);
 
 /**
@@ -187,6 +193,7 @@ bool scheduler_tz_is_supported(void);
  * @return true if registration successful.
  * @return false if registration failed.
  */
+__attribute__((section(".time_critical")))
 bool scheduler_tz_register_secure_function(const char *name, 
     void *secure_function, void **non_secure_callable);
 
@@ -200,6 +207,7 @@ bool scheduler_tz_register_secure_function(const char *name,
  * @return true if settings reset successfully.
  * @return false if settings could not be reset.
  */
+__attribute__((section(".time_critical")))
 bool scheduler_tz_reset_task_settings(uint32_t task_id);
 
 /**

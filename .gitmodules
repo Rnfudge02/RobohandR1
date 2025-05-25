@@ -7,3 +7,9 @@
 [submodule "Dependencies/bmp390-sensorapi"]
 	path = Dependencies/bmp390-sensorapi
 	url = https://github.com/boschsensortec/BMP3_SensorAPI.git
+[submodule "Dependencies/cmsis-dsp"]
+	path = Dependencies/cmsis-dsp
+	url = https://github.com/ARM-software/CMSIS-DSP.git
+[submodule "Dependencies/cmsis-core"]
+	path = Dependencies/cmsis-core
+	url = https://github.com/ARM-software/CMSIS_6.git

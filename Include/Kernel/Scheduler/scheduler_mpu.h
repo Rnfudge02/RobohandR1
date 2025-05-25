@@ -19,6 +19,9 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 
+// Maximum number of MPU regions per task
+#define MAX_MPU_REGIONS_PER_TASK   8
+
 /**
  * @defgroup mpu_enum MPU Enumerations
  * @{
@@ -61,7 +64,7 @@ typedef struct {
 typedef struct {
     uint32_t task_id;                      /**< Task ID to apply configuration to. */
 
-    mpu_region_config_t *regions;          /**< Array of region configurations. */
+    mpu_region_config_t regions[MAX_MPU_REGIONS_PER_TASK];          /**< Array of region configurations. */
 
     uint8_t region_count;                  /**< Number of regions in array. */
 } task_mpu_config_t;
@@ -117,6 +120,7 @@ bool scheduler_mpu_apply_task_settings(uint32_t task_id);
  * @return true if configuration successful.
  * @return false if configuration failed.
  */
+__attribute__((section(".time_critical")))
 bool scheduler_mpu_configure_task(const task_mpu_config_t *config);
 
 /**
@@ -134,6 +138,7 @@ bool scheduler_mpu_configure_task(const task_mpu_config_t *config);
  * @return true if configuration generated successfully.
  * @return false if configuration could not be generated.
  */
+__attribute__((section(".time_critical")))
 bool scheduler_mpu_create_default_config(uint32_t task_id,
     void *stack_start, size_t stack_size, void *code_start,
     size_t code_size, task_mpu_config_t *config);
@@ -148,6 +153,7 @@ bool scheduler_mpu_create_default_config(uint32_t task_id,
  * @param enable Whether to enable or disable protection.
  * @return true if successful, false if failed.
  */
+__attribute__((section(".time_critical")))
 bool scheduler_mpu_enable_protection(uint32_t task_id, bool enable);
 
 /**
@@ -230,6 +236,7 @@ bool scheduler_mpu_is_accessible(void *addr, size_t size, bool write_access);
  * @return true if MPU is available and enabled.
  * @return false if MPU is not available or disabled.
  */
+__attribute__((section(".time_critical")))
 bool scheduler_mpu_is_enabled(void);
 
 /**

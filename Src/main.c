@@ -51,7 +51,7 @@ int main(void) {
     // Initialize the system
     kernel_result_t result = kernel_init(&config);
     if (result != SYS_INIT_OK) {
-        printf("System initialization failed with code: %d\n", result);
+        printf("System initialization failed with code: %d.\n", result);
         return -1;
     }
     
@@ -59,7 +59,7 @@ int main(void) {
     init_application();
     
     // Log startup message
-    LOG_INFO("Main", "RobohandR1 firmware started successfully");
+    log_message(LOG_LEVEL_INFO, "Main", "RobohandR1 firmware started successfully.");
     
     // Enter the main system loop (this function never returns)
     kernel_run();
@@ -76,24 +76,24 @@ static int cmd_status(int argc, char *argv[]) {
     (void)argc;
     (void)argv;
     
-    LOG_INFO("Stats", "Application Status");
-    LOG_INFO("Stats", "------------------");
-    LOG_INFO("Stats", "Uptime: %lu ms.", kernel_get_uptime_ms());
+    log_message(LOG_LEVEL_INFO, "Stats", "Application Status");
+    log_message(LOG_LEVEL_INFO, "Stats", "------------------");
+    log_message(LOG_LEVEL_INFO, "Stats", "Uptime: %lu ms.", kernel_get_uptime_ms());
     
     // Get scheduler statistics
     scheduler_stats_t sched_stats;
     if (scheduler_get_stats(&sched_stats)) {
-        LOG_INFO("Stats", "Tasks created: %lu.", sched_stats.task_creates);
-        LOG_INFO("Stats", "Context switches: %lu.", sched_stats.context_switches);
+        log_message(LOG_LEVEL_INFO, "Stats", "Tasks created: %lu.", sched_stats.task_creates);
+        log_message(LOG_LEVEL_INFO, "Stats", "Context switches: %lu.", sched_stats.context_switches);
     }
     
     // Get system statistics
     system_stats_t sys_stats;
     if (stats_get_system(&sys_stats)) {
-        LOG_INFO("Stats", "CPU usage: %u%%", sys_stats.cpu_usage_percent);
-        LOG_INFO("Stats", "Core 0: %u%%", sys_stats.core0_usage_percent);
-        LOG_INFO("Stats", "Core 1: %u%%", sys_stats.core1_usage_percent);
-        LOG_INFO("Stats", "Temperature: %lu°C.", sys_stats.temperature_c);
+        log_message(LOG_LEVEL_INFO, "Stats", "CPU usage: %u%%", sys_stats.cpu_usage_percent);
+        log_message(LOG_LEVEL_INFO, "Stats", "Core 0: %u%%", sys_stats.core0_usage_percent);
+        log_message(LOG_LEVEL_INFO, "Stats", "Core 1: %u%%", sys_stats.core1_usage_percent);
+        log_message(LOG_LEVEL_INFO, "Stats", "Temperature: %lu°C.", sys_stats.temperature_c);
     }
     
     return 0;
@@ -108,9 +108,9 @@ static int cmd_version(int argc, char *argv[]) {
     (void)argc;
     (void)argv;
     
-    LOG_INFO("Firmware", "%s firmware v%s", APP_NAME, APP_VERSION);
-    LOG_INFO("Firmware", "Build date: %s %s", __DATE__, __TIME__);
-    LOG_INFO("Firmware", "SDK version: %s", PICO_SDK_VERSION_STRING);
+    log_message(LOG_LEVEL_INFO, "Firmware", "%s firmware v%s", APP_NAME, APP_VERSION);
+    log_message(LOG_LEVEL_INFO, "Firmware", "Build date: %s %s", __DATE__, __TIME__);
+    log_message(LOG_LEVEL_INFO, "Firmware", "SDK version: %s", PICO_SDK_VERSION_STRING);
     
     return 0;
 }
@@ -127,7 +127,7 @@ static void init_application(void) {
     
     // Initialize any other application-specific hardware
     
-    LOG_INFO("Main", "Application initialization complete");
+    log_message(LOG_LEVEL_INFO, "Main", "Application initialization complete.");
 }
 
 

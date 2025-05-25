@@ -150,6 +150,7 @@ bool shell_register_command(const shell_command_t *cmd);
  * }
  * @endcode
  */
+__attribute__((section(".time_critical")))
 void shell_task(void);
 
 /** @} */ //end of shell_api

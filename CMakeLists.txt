@@ -111,6 +111,7 @@ add_executable(RobohandR1
     
     ./Src/Programs/stats.c
     ./Src/Programs/usb_shell.c
+    ./Src/Programs/VectorND/vector_math.c
 )
 
 pico_set_program_name(RobohandR1 "RobohandR1")
@@ -125,6 +126,8 @@ target_include_directories(RobohandR1 PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}
     ${CMAKE_CURRENT_LIST_DIR}/Dependencies/bmm350-sensorapi
     ${CMAKE_CURRENT_LIST_DIR}/Dependencies/bmp390-sensorapi
+    ${CMAKE_CURRENT_LIST_DIR}/Dependencies/cmsis-core/CMSIS/Core/Include
+    ${CMAKE_CURRENT_LIST_DIR}/Dependencies/cmsis-dsp/Include
 
     ${CMAKE_CURRENT_LIST_DIR}/Include
 
@@ -138,6 +141,7 @@ target_include_directories(RobohandR1 PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}/Include/Kernel/Scheduler
 
     ${CMAKE_CURRENT_LIST_DIR}/Include/Programs
+    ${CMAKE_CURRENT_LIST_DIR}/Include/Programs/VectorND
 )
 
 # Use system includes for SDK directories to suppress warnings
@@ -154,6 +158,13 @@ target_compile_options(RobohandR1 PRIVATE
     ${PROJECT_WARNINGS}
     -ffunction-sections
     -fdata-sections
+    -ffast-math           # Fast floating-point (be careful with accuracy)
+    -funroll-loops        # Loop unrolling
+    -ftree-vectorize      # Auto-vectorization
+    -DARM_MATH_CM33
+    -DARM_MATH_DSP
+    -DARM_MATH_MATRIX_CHECK
+    -DARM_MATH_ROUNDING
 )
 
 # Add linker options - correct syntax without spaces in -Wl arguments
@@ -216,8 +227,15 @@ target_compile_definitions(RobohandR1 PRIVATE
     PICO_FPU_ENABLED=1
 )
 
+add_library(CMSISDSP STATIC IMPORTED)
+set_target_properties(CMSISDSP PROPERTIES
+    IMPORTED_LOCATION ${CMAKE_CURRENT_LIST_DIR}/Dependencies/build/bin_dsp/libCMSISDSP.a
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/Dependencies/cmsis-dsp/Include;${CMAKE_CURRENT_LIST_DIR}/Dependencies/cmsis-core/CMSIS/Core/Include"
+)
+
 # Add required libraries
 target_link_libraries(RobohandR1
+    CMSISDSP
     pico_multicore
     pico_stdlib
     hardware_adc

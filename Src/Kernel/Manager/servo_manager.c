@@ -287,17 +287,21 @@ bool servo_manager_set_position(servo_manager_t manager, uint id, float position
     
     // Find the servo
     bool found = false;
+
     for (int i = 0; i < SERVO_MANAGER_MAX_SERVOS; i++) {
         if (manager->servos[i].controller != NULL && manager->servos[i].id == id) {
             // Set position
             if (servo_controller_set_position(manager->servos[i].controller, position)) {
                 found = true;
                 
-                // Call movement callback if registered
-                if (manager->callback != NULL) {
-                    manager->callback(id, position, manager->callback_data);
-                }
+                
             }
+
+            // Call movement callback if registered
+            if ((manager->callback != NULL)  && found) {
+                manager->callback(id, position, manager->callback_data);
+            }
+
             break;
         }
     }
@@ -316,6 +320,7 @@ bool servo_manager_set_position_percent(servo_manager_t manager, uint id, float 
     
     // Find the servo
     bool found = false;
+    float position = 0.0f;
     for (int i = 0; i < SERVO_MANAGER_MAX_SERVOS; i++) {
         if (manager->servos[i].controller != NULL && manager->servos[i].id == id) {
             // Set position percentage
@@ -323,13 +328,15 @@ bool servo_manager_set_position_percent(servo_manager_t manager, uint id, float 
                 found = true;
                 
                 // Get the actual position for the callback
-                float position = servo_controller_get_position(manager->servos[i].controller);
+                position = servo_controller_get_position(manager->servos[i].controller);
                 
-                // Call movement callback if registered
-                if (manager->callback != NULL) {
-                    manager->callback(id, position, manager->callback_data);
-                }
+                
             }
+            // Call movement callback if registered
+            if ((manager->callback != NULL) && found) {
+                manager->callback(id, position, manager->callback_data);
+            }
+
             break;
         }
     }
@@ -348,6 +355,7 @@ bool servo_manager_set_pulse(servo_manager_t manager, uint id, uint pulse_us) {
     
     // Find the servo
     bool found = false;
+    float position = 0.0f;
     for (int i = 0; i < SERVO_MANAGER_MAX_SERVOS; i++) {
         if (manager->servos[i].controller != NULL && manager->servos[i].id == id) {
             // Set pulse width
@@ -355,13 +363,14 @@ bool servo_manager_set_pulse(servo_manager_t manager, uint id, uint pulse_us) {
                 found = true;
                 
                 // Get the actual position for the callback
-                float position = servo_controller_get_position(manager->servos[i].controller);
-                
-                // Call movement callback if registered
-                if (manager->callback != NULL) {
-                    manager->callback(id, position, manager->callback_data);
-                }
+                position = servo_controller_get_position(manager->servos[i].controller);
             }
+
+            // Call movement callback if registered
+            if ((manager->callback != NULL) && found) {
+                manager->callback(id, position, manager->callback_data);
+            }
+
             break;
         }
     }
@@ -385,12 +394,13 @@ bool servo_manager_set_speed(servo_manager_t manager, uint id, float speed) {
             // Set speed
             if (servo_controller_set_speed(manager->servos[i].controller, speed)) {
                 found = true;
-                
-                // Call movement callback if registered
-                if (manager->callback != NULL) {
-                    manager->callback(id, speed, manager->callback_data);
-                }
             }
+
+            // Call movement callback if registered
+            if ((manager->callback != NULL) && found) {
+                manager->callback(id, speed, manager->callback_data);
+            }
+
             break;
         }
     }
@@ -640,7 +650,7 @@ bool servo_manager_init(void) {
     // Initialize spinlock
     g_servo_lock_num = hw_spinlock_allocate(SPINLOCK_CAT_SERVO, "servo_manager_init");
     if (g_servo_lock_num == UINT_MAX) {
-        LOG_ERROR("Servo Manager Init", "Failed to claim spinlock for servo manager.");
+        log_message(LOG_LEVEL_ERROR, "Servo Manager Init", "Failed to claim spinlock for servo manager.");
         return false;
     }
     
@@ -660,7 +670,7 @@ bool servo_manager_init(void) {
     
     g_servo_manager = servo_manager_create(&sm_config);
     if (g_servo_manager == NULL) {
-        LOG_ERROR("Servo Manager Init", "Failed to create servo manager.");
+        log_message(LOG_LEVEL_ERROR, "Servo Manager Init", "Failed to create servo manager.");
         hw_spinlock_release(g_servo_lock_num, save);
         return false;
     }
@@ -679,7 +689,7 @@ bool servo_manager_init(void) {
     );
     
     if (g_servo_task_id < 0) {
-        LOG_ERROR("Servo Manager Init", "Failed to create servo manager task.");
+        log_message(LOG_LEVEL_ERROR, "Servo Manager Init", "Failed to create servo manager task.");
         servo_manager_destroy(g_servo_manager);
         g_servo_manager = NULL;
         hw_spinlock_release(g_servo_lock_num, save);
@@ -688,7 +698,7 @@ bool servo_manager_init(void) {
     
     // Start the servo manager
     if (!servo_manager_start(g_servo_manager)) {
-        LOG_ERROR("Servo Manager Init", "Failed to start servo manager.");
+        log_message(LOG_LEVEL_ERROR, "Servo Manager Init", "Failed to start servo manager.");
         servo_manager_destroy(g_servo_manager);
         g_servo_manager = NULL;
         hw_spinlock_release(g_servo_lock_num, save);
@@ -696,7 +706,7 @@ bool servo_manager_init(void) {
     }
     
     // Log success message if logging is available
-    LOG_INFO("Servo Manager Init", "Servo manager initialized successfully.");
+    log_message(LOG_LEVEL_INFO, "Servo Manager Init", "Servo manager initialized successfully.");
     
     // Release lock
     hw_spinlock_release(g_servo_lock_num, save);
@@ -758,9 +768,9 @@ bool servo_manager_ensure_task(void) {
     bool success = (g_servo_task_id >= 0);
     
     if (success) {
-        LOG_INFO("Servo Manager Init", "Servo manager task created with ID: %d.", g_servo_task_id);
+        log_message(LOG_LEVEL_INFO, "Servo Manager Init", "Servo manager task created with ID: %d.", g_servo_task_id);
     } else {
-        LOG_ERROR("Servo Manager Init", "Failed to create servo manager task.");
+        log_message(LOG_LEVEL_ERROR, "Servo Manager Init", "Failed to create servo manager task.");
     }
     
     // Release lock
@@ -769,310 +779,400 @@ bool servo_manager_ensure_task(void) {
     return success;
 }
 
-// Shell command handler for servo operations
-int cmd_servo(int argc, char *argv[]) {
-    if (argc < 2) {
-        printf("Usage: servo <command> [args...]\n");
-        printf("Commands:\n");
-        printf("  create <pin> [min_pulse] [max_pulse] - Create a new servo on specified GPIO pin\n");
-        printf("  list       - List all registered servos\n");
-        printf("  position <id> <degrees> - Set servo position in degrees\n");
-        printf("  percent <id> <percent>  - Set servo position as percentage (0-100)\n");
-        printf("  pulse <id> <us>         - Set servo pulse width in microseconds\n");
-        printf("  speed <id> <percent>    - Set continuous rotation servo speed (-100 to 100)\n");
-        printf("  sweep <id> <min> <max> <speed> - Configure automatic sweep mode\n");
-        printf("  mode <id> <mode>        - Set servo mode (0=disabled, 1=position, 2=speed, 3=sweep)\n");
-        printf("  enable <id>             - Enable servo output\n");
-        printf("  disable <id>            - Disable servo output\n");
-        printf("  center <id>             - Center the servo\n");
-        return 1;
-    }
+/**
+ * @brief Print servo command usage information
+ */
+static void print_servo_help(void) {
+    printf("Usage: servo <command> [args...]\n");
+    printf("Commands:\n");
+    printf("  create <pin> [min_pulse] [max_pulse] - Create a new servo on specified GPIO pin\n");
+    printf("  list       - List all registered servos\n");
+    printf("  position <id> <degrees> - Set servo position in degrees\n");
+    printf("  percent <id> <percent>  - Set servo position as percentage (0-100)\n");
+    printf("  pulse <id> <us>         - Set servo pulse width in microseconds\n");
+    printf("  speed <id> <percent>    - Set continuous rotation servo speed (-100 to 100)\n");
+    printf("  sweep <id> <min> <max> <speed> - Configure automatic sweep mode\n");
+    printf("  mode <id> <mode>        - Set servo mode (0=disabled, 1=position, 2=speed, 3=sweep)\n");
+    printf("  enable <id>             - Enable servo output\n");
+    printf("  disable <id>            - Disable servo output\n");
+    printf("  center <id>             - Center the servo\n");
+}
 
-    // Get the servo manager instance
+/**
+ * @brief Get or initialize the servo manager
+ * 
+ * @return servo_manager_t Manager instance or NULL if failed
+ */
+static servo_manager_t ensure_servo_manager(void) {
     servo_manager_t manager = servo_manager_get_instance();
     if (manager == NULL) {
         printf("Servo manager not initialized. Initializing now...\n");
         if (!servo_manager_init()) {
             printf("Failed to initialize servo manager\n");
-            return 1;
+            return NULL;
         }
         manager = servo_manager_get_instance();
         if (manager == NULL) {
             printf("Failed to get servo manager instance\n");
-            return 1;
+            return NULL;
         }
     }
+    return manager;
+}
 
-    // Process commands
-    if (strcmp(argv[1], "create") == 0) {
-        if (argc < 3) {
-            printf("Usage: servo create <pin> [min_pulse] [max_pulse]\n");
-            return 1;
-        }
+/**
+ * @brief Convert servo mode to string representation
+ */
+static const char* servo_mode_to_string(servo_mode_t mode) {
+    switch (mode) {
+        case SERVO_MODE_DISABLED: return "Disabled";
+        case SERVO_MODE_POSITION: return "Position";
+        case SERVO_MODE_SPEED:    return "Speed";
+        case SERVO_MODE_SWEEP:    return "Sweep";
+        default:                  return "Unknown";
+    }
+}
 
-        uint gpio_pin = atoi(argv[2]);
-        
-        // Create servo with default configuration
-        servo_config_t config;
-        servo_controller_get_default_config(&config);
-        config.gpio_pin = gpio_pin;
-        
-        // Apply custom pulse range if specified
-        if (argc >= 4) {
-            config.min_pulse_us = atoi(argv[3]);
-        }
-        if (argc >= 5) {
-            config.max_pulse_us = atoi(argv[4]);
-        }
-        
-        servo_controller_t controller = servo_controller_create(&config);
-        if (controller == NULL) {
-            printf("Failed to create servo controller for GPIO %u\n", gpio_pin);
-            return 1;
-        }
-        
-        // Add servo to manager with auto-assigned ID
-        int id = servo_manager_add_servo(manager, controller, 0);
-        if (id < 0) {
-            printf("Failed to add servo to manager\n");
-            servo_controller_destroy(controller);
-            return 1;
-        }
-        
-        printf("Created servo on GPIO %u with ID %d\n", gpio_pin, id);
-        printf("Pulse range: %u to %u microseconds\n", config.min_pulse_us, config.max_pulse_us);
-        printf("Angle range: %.1f to %.1f degrees\n", config.min_angle_deg, config.max_angle_deg);
-        
-        // Enable the servo by default
-        if (servo_manager_enable_servo(manager, id)) {
-            printf("Servo enabled and centered\n");
-            servo_manager_set_position(manager, id, 0.0f);  // Center position
-        }
-        
-        return 0;
-    }
-
-    else if (strcmp(argv[1], "list") == 0) {
-        printf("Registered servos:\n");
-        printf("ID | GPIO | Position | Pulse (us) | Mode\n");
-        printf("---+------+----------+-----------+--------\n");
-        
-        // For simplicity, we'll check IDs from 1 to 32
-        for (uint id = 1; id <= 32; id++) {
-            servo_controller_t controller = servo_manager_get_controller(manager, id);
-            if (controller != NULL) {
-                float position;
-                if (servo_manager_get_position(manager, id, &position)) {
-                    uint pulse = servo_controller_get_pulse(controller);
-                    
-                    servo_mode_t mode = servo_controller_get_mode(controller);
-                    char mode_str[9] = "Unknown";
-                    
-                    switch (mode) {
-                        case SERVO_MODE_DISABLED: strncpy(mode_str, "Disabled", 9); break;
-                        case SERVO_MODE_POSITION: strncpy(mode_str, "Position", 9); break;
-                        case SERVO_MODE_SPEED:    strncpy(mode_str, "Speed", 9); break;
-                        case SERVO_MODE_SWEEP:    strncpy(mode_str, "Sweep", 9); break;
-                        default:                  strncpy(mode_str, "Unknown", 9); break;
-                    }
-                    
-                    printf("%2u | %4u | %8.1f | %9u | %s\n", 
-                        id, 
-                        servo_controller_get_gpio_pin(controller),
-                        position, 
-                        pulse,
-                        mode_str);
-                    }
-            }
-        }
-        
-        return 0;
-    }
-
-    else if (strcmp(argv[1], "position") == 0) {
-        if (argc != 4) {
-            printf("Usage: servo position <id> <degrees>\n");
-            return 1;
-        }
-        
-        uint id = atoi(argv[2]);
-        float position = (float) atof(argv[3]);
-        
-        if (!servo_manager_set_position(manager, id, position)) {
-            printf("Failed to set position for servo %u\n", id);
-            return 1;
-        }
-        
-        printf("Set servo %u position to %.1f degrees\n", id, position);
-        return 0;
-    }
-    else if (strcmp(argv[1], "percent") == 0) {
-        if (argc != 4) {
-            printf("Usage: servo percent <id> <percent>\n");
-            return 1;
-        }
-        
-        uint id = atoi(argv[2]);
-        float percent = (float) atof(argv[3]);
-        
-        if (!servo_manager_set_position_percent(manager, id, percent)) {
-            printf("Failed to set position for servo %u\n", id);
-            return 1;
-        }
-        
-        // Get actual position for display
-        float position;
-        servo_manager_get_position(manager, id, &position);
-        
-        printf("Set servo %u position to %.1f%% (%.1f degrees)\n", id, percent, position);
-        return 0;
-    }
-    else if (strcmp(argv[1], "pulse") == 0) {
-        if (argc != 4) {
-            printf("Usage: servo pulse <id> <us>\n");
-            return 1;
-        }
-        
-        uint id = atoi(argv[2]);
-        uint pulse = atoi(argv[3]);
-        
-        if (!servo_manager_set_pulse(manager, id, pulse)) {
-            printf("Failed to set pulse for servo %u\n", id);
-            return 1;
-        }
-        
-        // Get actual position for display
-        float position;
-        servo_manager_get_position(manager, id, &position);
-        
-        printf("Set servo %u pulse to %u us (%.1f degrees)\n", id, pulse, position);
-        return 0;
-    }
-    else if (strcmp(argv[1], "speed") == 0) {
-        if (argc != 4) {
-            printf("Usage: servo speed <id> <percent>\n");
-            return 1;
-        }
-        
-        uint id = atoi(argv[2]);
-        float speed = (float) atof(argv[3]);
-        
-        if (!servo_manager_set_speed(manager, id, speed)) {
-            printf("Failed to set speed for servo %u\n", id);
-            return 1;
-        }
-        
-        printf("Set servo %u speed to %.1f%%\n", id, speed);
-        return 0;
-    }
-    else if (strcmp(argv[1], "sweep") == 0) {
-        if (argc != 6) {
-            printf("Usage: servo sweep <id> <min> <max> <speed>\n");
-            return 1;
-        }
-        
-        uint id = atoi(argv[2]);
-        float min_pos = (float) atof(argv[3]);
-        float max_pos = (float) atof(argv[4]);
-        float speed = (float) atof(argv[5]);
-        
-        if (!servo_manager_configure_sweep(manager, id, min_pos, max_pos, speed)) {
-            printf("Failed to configure sweep for servo %u\n", id);
-            return 1;
-        }
-        
-        printf("Configured sweep for servo %u: %.1f to %.1f degrees at %.1f deg/s\n",
-               id, min_pos, max_pos, speed);
-        return 0;
-    }
-    else if (strcmp(argv[1], "mode") == 0) {
-        if (argc != 4) {
-            printf("Usage: servo mode <id> <mode>\n");
-            printf("Modes: 0=Disabled, 1=Position, 2=Speed, 3=Sweep\n");
-            return 1;
-        }
-        
-        uint id = atoi(argv[2]);
-        int mode_val = atoi(argv[3]);
-        
-        if (mode_val < 0 || mode_val > 3) {
-            printf("Invalid mode value: %d\n", mode_val);
-            return 1;
-        }
-        
-        servo_mode_t mode = (servo_mode_t)mode_val;
-        
-        if (!servo_manager_set_mode(manager, id, mode)) {
-            printf("Failed to set mode for servo %u\n", id);
-            return 1;
-        }
-        
-        char mode_str[9] = "Unknown";
-        switch (mode) {
-            case SERVO_MODE_DISABLED: strncpy(mode_str, "Disabled", 9); break;
-            case SERVO_MODE_POSITION: strncpy(mode_str, "Position", 9); break;
-            case SERVO_MODE_SPEED:    strncpy(mode_str, "Speed", 9); break;
-            case SERVO_MODE_SWEEP:    strncpy(mode_str, "Sweep", 9); break;
-            default:                  strncpy(mode_str, "Unknown", 9); break;
-        }
-        
-        printf("Set servo %u mode to %s\n", id, mode_str);
-        return 0;
-    }
-    else if (strcmp(argv[1], "enable") == 0) {
-        if (argc != 3) {
-            printf("Usage: servo enable <id>\n");
-            return 1;
-        }
-        
-        uint id = atoi(argv[2]);
-        
-        if (!servo_manager_enable_servo(manager, id)) {
-            printf("Failed to enable servo %u\n", id);
-            return 1;
-        }
-        
-        printf("Enabled servo %u\n", id);
-        return 0;
-    }
-    else if (strcmp(argv[1], "disable") == 0) {
-        if (argc != 3) {
-            printf("Usage: servo disable <id>\n");
-            return 1;
-        }
-        
-        uint id = atoi(argv[2]);
-        
-        if (!servo_manager_disable_servo(manager, id)) {
-            printf("Failed to disable servo %u\n", id);
-            return 1;
-        }
-        
-        printf("Disabled servo %u\n", id);
-        return 0;
-    }
-    else if (strcmp(argv[1], "center") == 0) {
-        if (argc != 3) {
-            printf("Usage: servo center <id>\n");
-            return 1;
-        }
-        
-        uint id = atoi(argv[2]);
-        
-        if (!servo_manager_set_position(manager, id, 0.0f)) {
-            printf("Failed to center servo %u\n", id);
-            return 1;
-        }
-        
-        printf("Centered servo %u\n", id);
-        return 0;
-    }
-    else {
-        printf("Unknown servo command: %s\n", argv[1]);
+/**
+ * @brief Handle servo create command
+ */
+static int handle_servo_create(servo_manager_t manager, int argc, char *argv[]) {
+    if (argc < 3) {
+        printf("Usage: servo create <pin> [min_pulse] [max_pulse]\n");
         return 1;
     }
 
+    uint gpio_pin = atoi(argv[2]);
+    
+    // Create servo with default configuration
+    servo_config_t config;
+    servo_controller_get_default_config(&config);
+    config.gpio_pin = gpio_pin;
+    
+    // Apply custom pulse range if specified
+    if (argc >= 4) {
+        config.min_pulse_us = atoi(argv[3]);
+    }
+    if (argc >= 5) {
+        config.max_pulse_us = atoi(argv[4]);
+    }
+    
+    servo_controller_t controller = servo_controller_create(&config);
+    if (controller == NULL) {
+        printf("Failed to create servo controller for GPIO %u\n", gpio_pin);
+        return 1;
+    }
+    
+    // Add servo to manager with auto-assigned ID
+    int id = servo_manager_add_servo(manager, controller, 0);
+    if (id < 0) {
+        printf("Failed to add servo to manager\n");
+        servo_controller_destroy(controller);
+        return 1;
+    }
+    
+    printf("Created servo on GPIO %u with ID %d\n", gpio_pin, id);
+    printf("Pulse range: %u to %u microseconds\n", config.min_pulse_us, config.max_pulse_us);
+    printf("Angle range: %.1f to %.1f degrees\n", config.min_angle_deg, config.max_angle_deg);
+    
+    // Enable the servo by default
+    if (servo_manager_enable_servo(manager, id)) {
+        printf("Servo enabled and centered\n");
+        servo_manager_set_position(manager, id, 0.0f);  // Center position
+    }
+    
     return 0;
+}
+
+/**
+ * @brief Handle servo list command
+ */
+static int handle_servo_list(servo_manager_t manager) {
+    printf("Registered servos:\n");
+    printf("ID | GPIO | Position | Pulse (us) | Mode\n");
+    printf("---+------+----------+-----------+--------\n");
+    
+    // For simplicity, we'll check IDs from 1 to 32
+    for (uint id = 1; id <= 32; id++) {
+        servo_controller_t controller = servo_manager_get_controller(manager, id);
+        if (controller != NULL) {
+            float position;
+            if (servo_manager_get_position(manager, id, &position)) {
+                uint pulse = servo_controller_get_pulse(controller);
+                servo_mode_t mode = servo_controller_get_mode(controller);
+                
+                printf("%2u | %4u | %8.1f | %9u | %s\n", 
+                    id, 
+                    servo_controller_get_gpio_pin(controller),
+                    position, 
+                    pulse,
+                    servo_mode_to_string(mode));
+            }
+        }
+    }
+    
+    return 0;
+}
+
+/**
+ * @brief Handle servo position command
+ */
+static int handle_servo_position(servo_manager_t manager, int argc, char *argv[]) {
+    if (argc != 4) {
+        printf("Usage: servo position <id> <degrees>\n");
+        return 1;
+    }
+    
+    uint id = atoi(argv[2]);
+    float position = (float) atof(argv[3]);
+    
+    if (!servo_manager_set_position(manager, id, position)) {
+        printf("Failed to set position for servo %u\n", id);
+        return 1;
+    }
+    
+    printf("Set servo %u position to %.1f degrees\n", id, position);
+    return 0;
+}
+
+/**
+ * @brief Handle servo percent command
+ */
+static int handle_servo_percent(servo_manager_t manager, int argc, char *argv[]) {
+    if (argc != 4) {
+        printf("Usage: servo percent <id> <percent>\n");
+        return 1;
+    }
+    
+    uint id = atoi(argv[2]);
+    float percent = (float) atof(argv[3]);
+    
+    if (!servo_manager_set_position_percent(manager, id, percent)) {
+        printf("Failed to set position for servo %u\n", id);
+        return 1;
+    }
+    
+    // Get actual position for display
+    float position;
+    servo_manager_get_position(manager, id, &position);
+    
+    printf("Set servo %u position to %.1f%% (%.1f degrees)\n", id, percent, position);
+    return 0;
+}
+
+/**
+ * @brief Handle servo pulse command
+ */
+static int handle_servo_pulse(servo_manager_t manager, int argc, char *argv[]) {
+    if (argc != 4) {
+        printf("Usage: servo pulse <id> <us>\n");
+        return 1;
+    }
+    
+    uint id = atoi(argv[2]);
+    uint pulse = atoi(argv[3]);
+    
+    if (!servo_manager_set_pulse(manager, id, pulse)) {
+        printf("Failed to set pulse for servo %u\n", id);
+        return 1;
+    }
+    
+    // Get actual position for display
+    float position = 0.0f;
+    servo_manager_get_position(manager, id, &position);
+    
+    printf("Set servo %u pulse to %u us (%.1f degrees)\n", id, pulse, position);
+    return 0;
+}
+
+/**
+ * @brief Handle servo speed command
+ */
+static int handle_servo_speed(servo_manager_t manager, int argc, char *argv[]) {
+    if (argc != 4) {
+        printf("Usage: servo speed <id> <percent>\n");
+        return 1;
+    }
+    
+    uint id = atoi(argv[2]);
+    float speed = (float) atof(argv[3]);
+    
+    if (!servo_manager_set_speed(manager, id, speed)) {
+        printf("Failed to set speed for servo %u\n", id);
+        return 1;
+    }
+    
+    printf("Set servo %u speed to %.1f%%\n", id, speed);
+    return 0;
+}
+
+/**
+ * @brief Handle servo sweep command
+ */
+static int handle_servo_sweep(servo_manager_t manager, int argc, char *argv[]) {
+    if (argc != 6) {
+        printf("Usage: servo sweep <id> <min> <max> <speed>\n");
+        return 1;
+    }
+    
+    uint id = atoi(argv[2]);
+    float min_pos = (float) atof(argv[3]);
+    float max_pos = (float) atof(argv[4]);
+    float speed = (float) atof(argv[5]);
+    
+    if (!servo_manager_configure_sweep(manager, id, min_pos, max_pos, speed)) {
+        printf("Failed to configure sweep for servo %u\n", id);
+        return 1;
+    }
+    
+    printf("Configured sweep for servo %u: %.1f to %.1f degrees at %.1f deg/s\n",
+           id, min_pos, max_pos, speed);
+    return 0;
+}
+
+/**
+ * @brief Handle servo mode command
+ */
+static int handle_servo_mode(servo_manager_t manager, int argc, char *argv[]) {
+    if (argc != 4) {
+        printf("Usage: servo mode <id> <mode>\n");
+        printf("Modes: 0=Disabled, 1=Position, 2=Speed, 3=Sweep\n");
+        return 1;
+    }
+    
+    uint id = atoi(argv[2]);
+    int mode_val = atoi(argv[3]);
+    
+    if (mode_val < 0 || mode_val > 3) {
+        printf("Invalid mode value: %d\n", mode_val);
+        return 1;
+    }
+    
+    servo_mode_t mode = (servo_mode_t)mode_val;
+    
+    if (!servo_manager_set_mode(manager, id, mode)) {
+        printf("Failed to set mode for servo %u\n", id);
+        return 1;
+    }
+    
+    printf("Set servo %u mode to %s\n", id, servo_mode_to_string(mode));
+    return 0;
+}
+
+/**
+ * @brief Handle servo enable command
+ */
+static int handle_servo_enable(servo_manager_t manager, int argc, char *argv[]) {
+    if (argc != 3) {
+        printf("Usage: servo enable <id>\n");
+        return 1;
+    }
+    
+    uint id = atoi(argv[2]);
+    
+    if (!servo_manager_enable_servo(manager, id)) {
+        printf("Failed to enable servo %u\n", id);
+        return 1;
+    }
+    
+    printf("Enabled servo %u\n", id);
+    return 0;
+}
+
+/**
+ * @brief Handle servo disable command
+ */
+static int handle_servo_disable(servo_manager_t manager, int argc, char *argv[]) {
+    if (argc != 3) {
+        printf("Usage: servo disable <id>\n");
+        return 1;
+    }
+    
+    uint id = atoi(argv[2]);
+    
+    if (!servo_manager_disable_servo(manager, id)) {
+        printf("Failed to disable servo %u\n", id);
+        return 1;
+    }
+    
+    printf("Disabled servo %u\n", id);
+    return 0;
+}
+
+/**
+ * @brief Handle servo center command
+ */
+static int handle_servo_center(servo_manager_t manager, int argc, char *argv[]) {
+    if (argc != 3) {
+        printf("Usage: servo center <id>\n");
+        return 1;
+    }
+    
+    uint id = atoi(argv[2]);
+    
+    if (!servo_manager_set_position(manager, id, 0.0f)) {
+        printf("Failed to center servo %u\n", id);
+        return 1;
+    }
+    
+    printf("Centered servo %u\n", id);
+    return 0;
+}
+
+/**
+ * @brief Main servo command handler
+ */
+int cmd_servo(int argc, char *argv[]) {
+    if (argc < 2) {
+        print_servo_help();
+        return 1;
+    }
+
+    // Get or initialize the servo manager
+    servo_manager_t manager = ensure_servo_manager();
+    if (manager == NULL) {
+        return 1;
+    }
+
+    // Dispatch to the appropriate command handler
+    if (strcmp(argv[1], "create") == 0) {
+        return handle_servo_create(manager, argc, argv);
+    }
+    else if (strcmp(argv[1], "list") == 0) {
+        return handle_servo_list(manager);
+    }
+    else if (strcmp(argv[1], "position") == 0) {
+        return handle_servo_position(manager, argc, argv);
+    }
+    else if (strcmp(argv[1], "percent") == 0) {
+        return handle_servo_percent(manager, argc, argv);
+    }
+    else if (strcmp(argv[1], "pulse") == 0) {
+        return handle_servo_pulse(manager, argc, argv);
+    }
+    else if (strcmp(argv[1], "speed") == 0) {
+        return handle_servo_speed(manager, argc, argv);
+    }
+    else if (strcmp(argv[1], "sweep") == 0) {
+        return handle_servo_sweep(manager, argc, argv);
+    }
+    else if (strcmp(argv[1], "mode") == 0) {
+        return handle_servo_mode(manager, argc, argv);
+    }
+    else if (strcmp(argv[1], "enable") == 0) {
+        return handle_servo_enable(manager, argc, argv);
+    }
+    else if (strcmp(argv[1], "disable") == 0) {
+        return handle_servo_disable(manager, argc, argv);
+    }
+    else if (strcmp(argv[1], "center") == 0) {
+        return handle_servo_center(manager, argc, argv);
+    }
+    else {
+        printf("Unknown servo command: %s\n", argv[1]);
+        print_servo_help();
+        return 1;
+    }
 }
 
 // Register servo commands with the shell

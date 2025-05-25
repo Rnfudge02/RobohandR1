@@ -69,7 +69,7 @@ bool interrupt_manager_init(void) {
     // Initialize spinlock
     g_interrupt_lock_num = spin_lock_claim_unused(true);
     if (g_interrupt_lock_num == UINT_MAX) {
-        LOG_ERROR("Interrupt Manager", "Failed to claim spinlock");
+        log_message(LOG_LEVEL_ERROR, "Interrupt Manager", "Failed to claim spinlock");
         return false;
     }
     g_interrupt_lock = spin_lock_instance(g_interrupt_lock_num);
@@ -80,12 +80,12 @@ bool interrupt_manager_init(void) {
     
     // Create task for coalesced interrupt processing
     if (!setup_interrupt_task()) {
-        LOG_ERROR("Interrupt Manager", "Failed to create interrupt processing task");
+        log_message(LOG_LEVEL_ERROR, "Interrupt Manager", "Failed to create interrupt processing task");
         return false;
     }
     
     g_interrupt_manager_initialized = true;
-    LOG_INFO("Interrupt Manager", "Initialized successfully");
+    log_message(LOG_LEVEL_INFO, "Interrupt Manager", "Initialized successfully");
     
     return true;
 }
@@ -115,7 +115,7 @@ static bool setup_interrupt_task(void) {
                                5, // 5ms period
                                2, // 2ms deadline
                                1000)) { // 1000μs budget
-        LOG_WARN("Interrupt Manager", "Failed to set task deadline");
+        log_message(LOG_LEVEL_WARN, "Interrupt Manager", "Failed to set task deadline");
         // Non-critical failure, continue
     }
     
@@ -151,7 +151,7 @@ bool interrupt_register(uint32_t irq_num, interrupt_handler_t handler,
     }
     
     if (irq_num >= MAX_MANAGED_INTERRUPTS || handler == NULL || priority > 3) {
-        LOG_ERROR("Interrupt Manager", "Invalid parameters for interrupt registration");
+        log_message(LOG_LEVEL_ERROR, "Interrupt Manager", "Invalid parameters for interrupt registration");
         return false;
     }
     
@@ -161,7 +161,7 @@ bool interrupt_register(uint32_t irq_num, interrupt_handler_t handler,
     if (g_interrupts[irq_num].handler != NULL) {
         // Already registered
         spin_unlock(g_interrupt_lock, save);
-        LOG_WARN("Interrupt Manager", "IRQ %lu already registered", irq_num);
+        log_message(LOG_LEVEL_WARN, "Interrupt Manager", "IRQ %lu already registered", irq_num);
         return false;
     }
     
@@ -189,7 +189,7 @@ bool interrupt_register(uint32_t irq_num, interrupt_handler_t handler,
     
     spin_unlock(g_interrupt_lock, save);
     
-    LOG_INFO("Interrupt Manager", "Registered IRQ %lu with priority %lu", 
+    log_message(LOG_LEVEL_INFO, "Interrupt Manager", "Registered IRQ %lu with priority %lu", 
              irq_num, priority);
     
     return true;
@@ -222,7 +222,7 @@ bool interrupt_set_enabled(uint32_t irq_num, bool enabled) {
             irq_set_enabled(irq_num, false);
         }
         
-        LOG_INFO("Interrupt Manager", "IRQ %lu %s", 
+        log_message(LOG_LEVEL_INFO, "Interrupt Manager", "IRQ %lu %s", 
                  irq_num, enabled ? "enabled" : "disabled");
     }
     
@@ -260,10 +260,10 @@ bool interrupt_configure_coalescing(uint32_t irq_num, bool enabled,
     
     // Log the change
     if (enabled) {
-        LOG_INFO("Interrupt Manager", "Coalescing enabled for IRQ %lu, mode=%d, time=%lu, count=%lu",
+        log_message(LOG_LEVEL_INFO, "Interrupt Manager", "Coalescing enabled for IRQ %lu, mode=%d, time=%lu, count=%lu",
                  irq_num, mode, time_us, count);
     } else {
-        LOG_INFO("Interrupt Manager", "Coalescing disabled for IRQ %lu", irq_num);
+        log_message(LOG_LEVEL_INFO, "Interrupt Manager", "Coalescing disabled for IRQ %lu", irq_num);
     }
     
     spin_unlock(g_interrupt_lock, save);
@@ -308,122 +308,196 @@ bool interrupt_get_config(uint32_t irq_num, interrupt_config_t *config) {
 }
 
 /**
+ * @brief Check if the interrupt manager is initialized
+ * 
+ * @return true if initialized, false otherwise
+ */
+static bool is_interrupt_manager_initialized(void) {
+    return g_interrupt_manager_initialized;
+}
+
+/**
+ * @brief Get a thread-safe snapshot of active interrupts
+ * 
+ * @return Bitmap of currently active interrupts
+ */
+static uint32_t get_active_interrupts_snapshot(void) {
+    uint32_t save = spin_lock_blocking(g_interrupt_lock);
+    uint32_t active_bitset = g_coalesced_active;
+    spin_unlock(g_interrupt_lock, save);
+    return active_bitset;
+}
+
+/**
+ * @brief Determine if an interrupt should be processed based on its mode
+ * 
+ * @param config Pointer to interrupt configuration
+ * @param current_time Current system time
+ * @return true if interrupt should be processed, false otherwise
+ */
+static bool should_process_interrupt(interrupt_config_t *config, absolute_time_t current_time) {
+    if (config->handler == NULL || !config->coalescing_enabled || config->coalesced_count == 0) {
+        return false;
+    }
+    
+    bool should_process = false;
+    
+    switch (config->mode) {
+        case INT_COALESCE_TIME:
+            if (absolute_time_diff_us(config->last_handled, current_time) >= 
+                config->coalesce_time_us) {
+                should_process = true;
+                g_int_stats.time_triggered_counts++;
+            }
+            break;
+            
+        case INT_COALESCE_COUNT:
+            if (config->coalesced_count >= config->coalesce_count) {
+                should_process = true;
+                g_int_stats.count_triggered_counts++;
+            }
+            break;
+            
+        case INT_COALESCE_HYBRID:
+            if (config->coalesced_count >= config->coalesce_count ||
+                absolute_time_diff_us(config->last_handled, current_time) >= 
+                config->coalesce_time_us) {
+                should_process = true;
+                
+                if (config->coalesced_count >= config->coalesce_count) {
+                    g_int_stats.count_triggered_counts++;
+                } else {
+                    g_int_stats.time_triggered_counts++;
+                }
+            }
+            break;
+            
+        default:
+            should_process = false;
+            break;
+    }
+    
+    return should_process;
+}
+
+/**
+ * @brief Update maximum coalesce depth statistic if needed
+ * 
+ * @param count The coalesced count to check against current maximum
+ */
+static void update_max_coalesce_depth(uint32_t count) {
+    if (count > g_int_stats.max_coalesce_depth) {
+        g_int_stats.max_coalesce_depth = count;
+    }
+}
+
+/**
+ * @brief Reset coalesced interrupt state after processing
+ * 
+ * @param irq Interrupt number
+ * @param config Pointer to interrupt configuration
+ * @param current_time Current system time
+ * @return Coalesced count before reset
+ */
+static uint32_t reset_coalesced_interrupt(uint32_t irq, interrupt_config_t *config, absolute_time_t current_time) {
+    uint32_t count = config->coalesced_count;
+    
+    // Reset the counter
+    config->coalesced_count = 0;
+    
+    // Clear from active bitset if counter is now 0
+    g_coalesced_active &= ~(1 << irq);
+    
+    // Update timestamp
+    config->last_handled = current_time;
+    
+    return count;
+}
+
+/**
+ * @brief Execute the interrupt handler for coalesced interrupts
+ * 
+ * @param irq Interrupt number
+ * @param config Pointer to interrupt configuration
+ * @param count Number of coalesced interrupts to process
+ * @return Number of processed interrupts
+ */
+static uint32_t execute_interrupt_handler(uint32_t irq, interrupt_config_t *config, uint32_t count) {
+    // Notify global callback
+    if (g_global_callback) {
+        g_global_callback(EVENT_COALESCE_TRIGGERED, g_global_callback_context);
+    }
+    
+    // Execute handler with the coalesced count
+    uint64_t start_time = time_us_64();
+    
+    // Call the handler for each coalesced interrupt
+    for (uint32_t i = 0; i < count; i++) {
+        config->handler(irq, config->context);
+    }
+    
+    uint64_t end_time = time_us_64();
+    
+    // Update processing time statistic
+    uint32_t save = spin_lock_blocking(g_interrupt_lock);
+    g_int_stats.total_processing_time_us += (end_time - start_time);
+    g_int_stats.coalesce_triggers++;
+    spin_unlock(g_interrupt_lock, save);
+    
+    return count;
+}
+
+/**
+ * @brief Process a single coalesced interrupt
+ * 
+ * @param irq Interrupt number
+ * @param active_bitset Bitmap of active interrupts
+ * @param current_time Current system time
+ * @return Number of processed interrupts
+ */
+static uint32_t process_single_interrupt(uint32_t irq, uint32_t active_bitset, absolute_time_t current_time) {
+    if (!(active_bitset & (1 << irq))) {
+        return 0;
+    }
+    
+    uint32_t save = spin_lock_blocking(g_interrupt_lock);
+    interrupt_config_t *config = &g_interrupts[irq];
+    
+    if (!should_process_interrupt(config, current_time)) {
+        spin_unlock(g_interrupt_lock, save);
+        return 0;
+    }
+    
+    update_max_coalesce_depth(config->coalesced_count);
+    uint32_t count = reset_coalesced_interrupt(irq, config, current_time);
+    
+    // Release lock during processing
+    spin_unlock(g_interrupt_lock, save);
+    
+    return execute_interrupt_handler(irq, config, count);
+}
+
+/**
  * @brief Process coalesced interrupts
  * 
  * Called from the interrupt task to handle batched interrupts
+ * 
+ * @return Number of processed interrupts
  */
 uint32_t interrupt_process_coalesced(void) {
-    if (!g_interrupt_manager_initialized) {
+    if (!is_interrupt_manager_initialized()) {
         return 0;
     }
     
     uint32_t processed_count = 0;
     absolute_time_t current_time = get_absolute_time();
     
-    uint32_t save = spin_lock_blocking(g_interrupt_lock);
-    
-    // Copy active bitset to avoid modifications during processing
-    uint32_t active_bitset = g_coalesced_active;
-    
-    spin_unlock(g_interrupt_lock, save);
+    // Get a thread-safe snapshot of active interrupts
+    uint32_t active_bitset = get_active_interrupts_snapshot();
     
     // Process each active interrupt
     for (uint32_t irq = 0; irq < MAX_MANAGED_INTERRUPTS; irq++) {
-        if (active_bitset & (1 << irq)) {
-            save = spin_lock_blocking(g_interrupt_lock);
-            
-            interrupt_config_t *config = &g_interrupts[irq];
-            
-            // Check if handler is registered and coalescing is enabled
-            if (config->handler != NULL && config->coalescing_enabled) {
-                bool should_process = false;
-                
-                // Determine if we should process based on mode
-                switch (config->mode) {
-                    case INT_COALESCE_TIME:
-                        if (absolute_time_diff_us(config->last_handled, current_time) >= 
-                            config->coalesce_time_us) {
-                            should_process = true;
-                            g_int_stats.time_triggered_counts++;
-                        }
-                        break;
-                        
-                    case INT_COALESCE_COUNT:
-                        if (config->coalesced_count >= config->coalesce_count) {
-                            should_process = true;
-                            g_int_stats.count_triggered_counts++;
-                        }
-                        break;
-                        
-                    case INT_COALESCE_HYBRID:
-                        if (config->coalesced_count >= config->coalesce_count ||
-                            absolute_time_diff_us(config->last_handled, current_time) >= 
-                            config->coalesce_time_us) {
-                            should_process = true;
-                            
-                            if (config->coalesced_count >= config->coalesce_count) {
-                                g_int_stats.count_triggered_counts++;
-                            } else {
-                                g_int_stats.time_triggered_counts++;
-                            }
-                        }
-                        break;
-                        
-                    default:
-                        should_process = false;
-                        break;
-                }
-                
-                // Process if needed
-                if (should_process && config->coalesced_count > 0) {
-                    // Update statistics
-                    if (config->coalesced_count > g_int_stats.max_coalesce_depth) {
-                        g_int_stats.max_coalesce_depth = config->coalesced_count;
-                    }
-                    
-                    // Save a local copy of count for processing
-                    uint32_t count = config->coalesced_count;
-                    
-                    // Reset the counter
-                    config->coalesced_count = 0;
-                    
-                    // Clear from active bitset if counter is now 0
-                    g_coalesced_active &= ~(1 << irq);
-                    
-                    // Update timestamp
-                    config->last_handled = current_time;
-                    
-                    // Release lock during processing
-                    spin_unlock(g_interrupt_lock, save);
-                    
-                    // Notify global callback
-                    if (g_global_callback) {
-                        g_global_callback(EVENT_COALESCE_TRIGGERED, g_global_callback_context);
-                    }
-                    
-                    // Execute handler with the coalesced count
-                    uint64_t start_time = time_us_64();
-                    
-                    // Call the handler
-                    for (uint32_t i = 0; i < count; i++) {
-                        config->handler(irq, config->context);
-                        processed_count++;
-                    }
-                    
-                    uint64_t end_time = time_us_64();
-                    
-                    // Update processing time statistic
-                    save = spin_lock_blocking(g_interrupt_lock);
-                    g_int_stats.total_processing_time_us += (end_time - start_time);
-                    g_int_stats.coalesce_triggers++;
-                    spin_unlock(g_interrupt_lock, save);
-                } else {
-                    spin_unlock(g_interrupt_lock, save);
-                }
-            } else {
-                spin_unlock(g_interrupt_lock, save);
-            }
-        }
+        processed_count += process_single_interrupt(irq, active_bitset, current_time);
     }
     
     return processed_count;
@@ -452,7 +526,7 @@ bool interrupt_reset_stats(void) {
     
     spin_unlock(g_interrupt_lock, save);
     
-    LOG_INFO("Interrupt Manager", "Statistics reset");
+    log_message(LOG_LEVEL_INFO, "Interrupt Manager", "Statistics reset");
     return true;
 }
 
@@ -473,7 +547,7 @@ bool interrupt_register_global_callback(void (*callback)(uint32_t event_type,
     
     spin_unlock(g_interrupt_lock, save);
     
-    LOG_INFO("Interrupt Manager", "Global callback registered");
+    log_message(LOG_LEVEL_INFO, "Interrupt Manager", "Global callback registered");
     return true;
 }
 
@@ -507,7 +581,7 @@ static void process_interrupt(interrupt_config_t *config) {
  * 
  * @param irq_num Hardware IRQ number
  */
-__attribute__((section(".time_critical")))
+
 static void interrupt_handler_wrapper(uint irq_num) {
     if (irq_num >= MAX_MANAGED_INTERRUPTS) {
         // Invalid IRQ number

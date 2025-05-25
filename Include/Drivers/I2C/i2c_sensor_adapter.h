@@ -97,7 +97,36 @@ typedef union {
     struct {
         float value;            // Generic single value.
     } scalar;
+
+    float timestamp;
 } sensor_data_t;
+
+typedef union {
+    struct {
+        float x;
+        float y;
+        float z;
+    } mag_data_t;
+    
+    float timestamp;
+} mag_sensor_data_t;
+
+typedef union {
+    struct {
+        float x;
+        float y;
+        float z;
+    } accel_data_t;
+
+    struct {
+        float x;
+        float y;
+        float z;
+        float w;
+    } orientation_data_t;
+    
+    float timestamp;
+} accel_sensor_data_t;
 
 /**
  * @brief Forward declaration of sensor adapter handle.
@@ -152,6 +181,7 @@ bool i2c_sensor_adapter_destroy(i2c_sensor_adapter_t adapter);
  * @param data Pointer to data structure to fill.
  * @return true if data was retrieved successfully, false otherwise.
  */
+__attribute__((section(".time_critical")))
 bool i2c_sensor_adapter_get_data(i2c_sensor_adapter_t adapter, sensor_data_t* data);
 
 /**
@@ -160,6 +190,7 @@ bool i2c_sensor_adapter_get_data(i2c_sensor_adapter_t adapter, sensor_data_t* da
  * @param adapter Sensor adapter handle.
  * @return Sensor type.
  */
+__attribute__((section(".time_critical")))
 sensor_type_t i2c_sensor_adapter_get_type(i2c_sensor_adapter_t adapter);
 
 /**
@@ -170,11 +201,8 @@ sensor_type_t i2c_sensor_adapter_get_type(i2c_sensor_adapter_t adapter);
  * @param user_data User data to pass to callback.
  * @return true if registered successfully, false otherwise.
  */
-bool i2c_sensor_adapter_register_callback(
-    i2c_sensor_adapter_t adapter,
-    sensor_data_callback_t callback,
-    void* user_data
-);
+bool i2c_sensor_adapter_register_callback(i2c_sensor_adapter_t adapter,
+    sensor_data_callback_t callback, void* user_data);
 
 /**
  * @brief Set sensor power mode.
@@ -183,6 +211,7 @@ bool i2c_sensor_adapter_register_callback(
  * @param mode Power mode to set.
  * @return true if mode was set successfully, false otherwise.
  */
+__attribute__((section(".time_critical")))
 bool i2c_sensor_adapter_set_power_mode(i2c_sensor_adapter_t adapter, sensor_power_mode_t mode);
 
 /**
@@ -192,6 +221,7 @@ bool i2c_sensor_adapter_set_power_mode(i2c_sensor_adapter_t adapter, sensor_powe
  * @param rate Data rate to set.
  * @return true if rate was set successfully, false otherwise.
  */
+__attribute__((section(".time_critical")))
 bool i2c_sensor_adapter_set_rate(i2c_sensor_adapter_t adapter, sensor_rate_t rate);
 
 /**
@@ -217,7 +247,10 @@ bool i2c_sensor_adapter_stop(i2c_sensor_adapter_t adapter);
  * 
  * @param adapter Sensor adapter handle.
  */
+__attribute__((section(".time_critical")))
 void i2c_sensor_adapter_task_execute(i2c_sensor_adapter_t adapter);
+
+bool i2c_sensor_adapter_update_data(i2c_sensor_adapter_t adapter, const sensor_data_t* data);
 
 /** @} */ // end of i2c_sensor_adapter_api group
 

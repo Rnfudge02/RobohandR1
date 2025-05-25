@@ -232,18 +232,18 @@ bool sensor_manager_stop_all(sensor_manager_t manager) {
 // In sensor_manager.c - Modify sensor_manager_start_sensor
 bool sensor_manager_start_sensor(sensor_manager_t manager, sensor_type_t type) {
     if (manager == NULL) {
-        LOG_ERROR("Sensor Manager", "Sensor manager is NULL.");
+        log_message(LOG_LEVEL_ERROR, "Sensor Manager", "Sensor manager is NULL.");
         return false;
     }
     
     if (type == SENSOR_TYPE_UNKNOWN) {
-        LOG_ERROR("Sensor Manager", "Unknown sensor type.");
+        log_message(LOG_LEVEL_ERROR, "Sensor Manager", "Unknown sensor type.");
         return false;
     }
     
     // Acquire lock
     if (!sensor_manager_lock(manager)) {
-        LOG_ERROR("Sensor Manager", "Failed to acquire sensor manager lock.");
+        log_message(LOG_LEVEL_ERROR, "Sensor Manager", "Failed to acquire sensor manager lock.");
         return false;
     }
     
@@ -254,13 +254,13 @@ bool sensor_manager_start_sensor(sensor_manager_t manager, sensor_type_t type) {
         if (manager->sensors[i].adapter != NULL &&
             i2c_sensor_adapter_get_type(manager->sensors[i].adapter) == type) {
             // Found the sensor, start it
-            LOG_INFO("Sensor Manager", "Starting sensor of type %d.", type);
+            log_message(LOG_LEVEL_INFO, "Sensor Manager", "Starting sensor of type %d.", type);
             if (i2c_sensor_adapter_start(manager->sensors[i].adapter)) {
                 manager->sensors[i].is_active = true;
-                LOG_INFO("Sensor Manager", "Sensor started successfully.");
+                log_message(LOG_LEVEL_INFO, "Sensor Manager", "Sensor started successfully.");
                 result = true;
             } else {
-                LOG_ERROR("Sensor Manager", "Failed to start sensor adapter.");
+                log_message(LOG_LEVEL_ERROR, "Sensor Manager", "Failed to start sensor adapter.");
             }
             break;
         }
@@ -270,7 +270,7 @@ bool sensor_manager_start_sensor(sensor_manager_t manager, sensor_type_t type) {
     sensor_manager_unlock(manager);
     
     if (!result) {
-        LOG_ERROR("Sensor Manager", "Sensor of type %d not found or failed to start.", type);
+        log_message(LOG_LEVEL_ERROR, "Sensor Manager", "Sensor of type %d not found or failed to start.", type);
     }
     
     return result;
@@ -350,49 +350,62 @@ bool sensor_manager_register_callback(
     return true;
 }
 
+// Helper function to check if a sensor slot is valid
+static bool is_sensor_valid(const sensor_manager_t manager, int index) {
+    return manager->sensors[index].adapter != NULL;
+}
+
+// Helper function to get sensor type safely
+static sensor_type_t get_sensor_type(const sensor_manager_t manager, int index) {
+    return i2c_sensor_adapter_get_type(manager->sensors[index].adapter);
+}
+
+// Helper function to attempt data retrieval from a sensor
+static bool try_get_sensor_data(const sensor_manager_t manager, int index, sensor_data_t* data) {
+    bool result = i2c_sensor_adapter_get_data(manager->sensors[index].adapter, data);
+    if (!result) {
+        log_message(LOG_LEVEL_ERROR, "Sensor Manager", "Failed to get data from sensor adapter");
+    }
+    return result;
+}
+
 bool sensor_manager_get_data(sensor_manager_t manager, sensor_type_t type, sensor_data_t* data) {
+    // Early parameter validation
     if (manager == NULL || type == SENSOR_TYPE_UNKNOWN || data == NULL) {
-        LOG_ERROR("Sensor Manager", "get_data failed: Invalid parameters.");
+        log_message(LOG_LEVEL_ERROR, "Sensor Manager", "get_data failed: Invalid parameters.");
         return false;
     }
 
-    // Log the request
-    LOG_DEBUG("Sensor Manager", "Requested data for sensor type: %d", type);
-    
-    // Count how many sensors we have registered
+    log_message(LOG_LEVEL_DEBUG, "Sensor Manager", "Requested data for sensor type: %d", type);
+
+    // Single loop to find sensor and track if any sensors exist
     int sensor_count = 0;
     for (int i = 0; i < SENSOR_MANAGER_MAX_SENSORS; i++) {
-        if (manager->sensors[i].adapter != NULL) {
-            sensor_count++;
-            sensor_type_t sensor_type = i2c_sensor_adapter_get_type(manager->sensors[i].adapter);
-            LOG_DEBUG("Sensor Manager", "Found sensor at index %d with type %d", i, sensor_type);
+        if (!is_sensor_valid(manager, i)) {
+            continue;  // Skip invalid sensors early
         }
+
+        sensor_count++;
+        sensor_type_t sensor_type = get_sensor_type(manager, i);
+        log_message(LOG_LEVEL_DEBUG, "Sensor Manager", "Found sensor at index %d with type %d", i, sensor_type);
+
+        // Check if this is the sensor we're looking for
+        if (sensor_type != type) {
+            continue;  // Not the right type, keep looking
+        }
+
+        // Found matching sensor - get data and return
+        log_message(LOG_LEVEL_DEBUG, "Sensor Manager", "Found matching sensor at index %d, getting data", i);
+        return try_get_sensor_data(manager, i, data);
     }
-    
+
+    // Handle cases where we didn't find the sensor
     if (sensor_count == 0) {
-        LOG_WARN("Sensor Manager", "No sensors registered with manager.");
+        log_message(LOG_LEVEL_WARN, "Sensor Manager", "No sensors registered with manager.");
         return false;
     }
-    
-    // Find the sensor
-    for (int i = 0; i < SENSOR_MANAGER_MAX_SENSORS; i++) {
-        if (manager->sensors[i].adapter != NULL) {
-            sensor_type_t sensor_type = i2c_sensor_adapter_get_type(manager->sensors[i].adapter);
-            
-            if (sensor_type == type) {
-                // Found the sensor, get data
-                LOG_DEBUG("Sensor Manager", "Found matching sensor at index %d, getting data", i);
-                bool result = i2c_sensor_adapter_get_data(manager->sensors[i].adapter, data);
-                if (!result) {
-                    LOG_ERROR("Sensor Manager", "Failed to get data from sensor adapter");
-                }
-                return result;
-            }
-        }
-    }
-    
-    // Sensor not found
-    LOG_WARN("Sensor Manager", "No sensor of type %d found among %d registered sensors", type, sensor_count);
+
+    log_message(LOG_LEVEL_WARN, "Sensor Manager", "No sensor of type %d found among %d registered sensors", type, sensor_count);
     return false;
 }
 
@@ -498,7 +511,7 @@ int sensor_manager_get_all_statuses(
 
 // Internal callback function for sensor data
 static void sensor_manager_internal_callback(sensor_type_t type, const sensor_data_t* data, void* user_data) {
-    sensor_manager_t manager = (sensor_manager_t)user_data;
+    sensor_manager_t manager = (sensor_manager_t) user_data;
     
     if (manager == NULL || data == NULL) {
         return;
@@ -623,7 +636,7 @@ i2c_driver_ctx_t* sensor_manager_get_i2c_context(sensor_manager_t manager) {
  * 
  * @param param Parameters (unused)
  */
-__attribute__((section(".time_critical")))
+
 static void sensor_manager_scheduler_task(void *param) {
     (void)param; // Unused parameter
     
@@ -642,7 +655,7 @@ bool sensor_manager_init(void) {
     // Initialize spinlock
     g_sensor_lock_num = hw_spinlock_allocate(SPINLOCK_CAT_SENSOR, "sensor_manager_init");
     if (g_sensor_lock_num == UINT_MAX) {
-        LOG_ERROR("Sensor Manager Init", "Failed to claim spinlock for sensor manager init.");
+        log_message(LOG_LEVEL_ERROR, "Sensor Manager Init", "Failed to claim spinlock for sensor manager init.");
         return false;
     }
     
@@ -664,11 +677,11 @@ bool sensor_manager_init(void) {
     i2c_config.sda_pin = 16;
     i2c_config.scl_pin = 17;
     i2c_config.clock_freq = 400000;  // 400 kHz
-    i2c_config.use_dma = true;       // Enable DMA for better performance
+    i2c_config.use_dma = false;       // Enable DMA for better performance
     
     g_i2c_driver = i2c_driver_init(&i2c_config);
     if (g_i2c_driver == NULL) {
-        LOG_ERROR("Sensor Manager Init", "Failed to initialize I2C driver.");
+        log_message(LOG_LEVEL_ERROR, "Sensor Manager Init", "Failed to initialize I2C driver.");
         hw_spinlock_release(g_sensor_lock_num, save);
         return false;
     }
@@ -681,7 +694,7 @@ bool sensor_manager_init(void) {
     
     g_global_sensor_manager = sensor_manager_create(&sm_config);
     if (g_global_sensor_manager == NULL) {
-        LOG_ERROR("Sensor Manager Init", "Failed to create sensor manager.");
+        log_message(LOG_LEVEL_ERROR, "Sensor Manager Init", "Failed to create sensor manager.");
         i2c_driver_deinit(g_i2c_driver);
         g_i2c_driver = NULL;
         hw_spinlock_release(g_sensor_lock_num, save);
@@ -692,7 +705,7 @@ bool sensor_manager_init(void) {
     bool sensor_setup_success = setup_default_sensors(g_global_sensor_manager);
     if (!sensor_setup_success) {
         // Non-fatal warning
-        LOG_WARN("Sensor Manager Init","Some sensors failed to initialize.");
+        log_message(LOG_LEVEL_WARN, "Sensor Manager Init","Some sensors failed to initialize.");
     }
     
     // Create scheduler task
@@ -704,12 +717,12 @@ bool sensor_manager_init(void) {
         2048,                             // Stack size (adjust as needed)
         TASK_PRIORITY_HIGH,               // High priority
         "sensor_mgr",                     // Task name
-        1,                                // Core 0 for sensor tasks
+        0,                                // Core 0 for sensor tasks
         TASK_TYPE_PERSISTENT              // Runs indefinitely
     );
     
     if (g_sensor_task_id < 0) {
-        LOG_ERROR("Sensor Manager Init", "Failed to create sensor manager task.");
+        log_message(LOG_LEVEL_ERROR, "Sensor Manager Init", "Failed to create sensor manager task.");
         sensor_manager_destroy(g_global_sensor_manager);
         g_global_sensor_manager = NULL;
         i2c_driver_deinit(g_i2c_driver);
@@ -721,7 +734,7 @@ bool sensor_manager_init(void) {
     // Release lock
     hw_spinlock_release(g_sensor_lock_num, save);
     
-    LOG_INFO("Sensor Manager Init","Sensor manager initialized successfully.");
+    log_message(LOG_LEVEL_INFO, "Sensor Manager Init","Sensor manager initialized successfully.");
     return true;
 }
 
@@ -739,7 +752,7 @@ static bool setup_default_sensors(sensor_manager_t manager) {
     bool any_success = false;
     
     // Set up BMM350 magnetometer
-    const i2c_sensor_adapter_t* mag_adapter = setup_bmm350_sensor(manager);     //TODO
+    const i2c_sensor_adapter_t mag_adapter = setup_bmm350_sensor(manager);     // NOSONAR is const?
     if (mag_adapter != NULL) {
         any_success = true;
     }
@@ -757,13 +770,13 @@ static bool setup_default_sensors(sensor_manager_t manager) {
  */
 static i2c_sensor_adapter_t setup_bmm350_sensor(sensor_manager_t manager) {
     // Create BMM350 adapter
-    LOG_INFO("BMM350 Setup", "Initializing BMM350 adapter...");
+    log_message(LOG_LEVEL_INFO, "BMM350 Setup", "Initializing BMM350 adapter...");
     bmm350_task_tcb_t* bmm350_tcb = bmm350_adapter_init(g_i2c_driver);
     if (bmm350_tcb == NULL) {
-        LOG_ERROR("BMM350 Adapter", "Failed to initialize BMM350 adapter.");
+        log_message(LOG_LEVEL_ERROR, "BMM350 Adapter", "Failed to initialize BMM350 adapter.");
         return NULL;
     }
-    LOG_INFO("BMM350 Setup", "BMM350 adapter initialized successfully.");
+    log_message(LOG_LEVEL_INFO, "BMM350 Setup", "BMM350 adapter initialized successfully.");
     
     // Create sensor adapter
     i2c_sensor_config_t config = {
@@ -774,7 +787,7 @@ static i2c_sensor_adapter_t setup_bmm350_sensor(sensor_manager_t manager) {
         .device_addr = BMM350_I2C_ADSEL_SET_LOW  // Default address
     };
     
-    LOG_INFO("BMM350 Setup", "Creating sensor adapter with type MAGNETOMETER...");
+    log_message(LOG_LEVEL_INFO, "BMM350 Setup", "Creating sensor adapter with type MAGNETOMETER...");
     i2c_sensor_adapter_t adapter = i2c_sensor_adapter_create(
         g_i2c_driver,
         &config,
@@ -783,25 +796,29 @@ static i2c_sensor_adapter_t setup_bmm350_sensor(sensor_manager_t manager) {
     );
     
     if (adapter == NULL) {
-        LOG_ERROR("BMM350 Adapter", "Failed to create sensor adapter for BMM350.");
+        log_message(LOG_LEVEL_ERROR, "BMM350 Adapter", "Failed to create sensor adapter for BMM350.");
         bmm350_adapter_deinit(bmm350_tcb);
         return NULL;
     }
-    LOG_INFO("BMM350 Setup", "Sensor adapter created successfully.");
+    
+    // Link the adapter back to the BMM350 TCB so it can update data
+    bmm350_tcb->sensor_adapter = adapter;
+    
+    log_message(LOG_LEVEL_INFO, "BMM350 Setup", "Sensor adapter created successfully.");
     
     // Add to sensor manager
-    LOG_INFO("BMM350 Setup", "Adding sensor to manager...");
+    log_message(LOG_LEVEL_INFO, "BMM350 Setup", "Adding sensor to manager...");
     if (!sensor_manager_add_sensor(manager, adapter)) {
-        LOG_ERROR("BMM350 Adapter", "Failed to add BMM350 sensor to manager.");
+        log_message(LOG_LEVEL_ERROR, "BMM350 Adapter", "Failed to add BMM350 sensor to manager.");
         i2c_sensor_adapter_destroy(adapter);
         return NULL;
     }
-    LOG_INFO("BMM350 Setup", "BMM350 sensor added to manager successfully.");
+    log_message(LOG_LEVEL_INFO, "BMM350 Setup", "BMM350 sensor added to manager successfully.");
     
     return adapter;
 }
 
-__attribute__((section(".time_critical")))
+
 sensor_manager_t sensor_manager_get_instance(void) {
     return g_global_sensor_manager;
 }
@@ -847,411 +864,468 @@ static int sensor_i2c_read(i2c_driver_ctx_t* i2c_ctx, uint8_t dev_addr, uint8_t 
 static int sensor_i2c_write(i2c_driver_ctx_t* i2c_ctx, uint8_t dev_addr, uint8_t reg_addr, const uint8_t* data, uint8_t len);
 
 // Shell command handler for sensor operations
+static void print_sensor_usage(void) {
+    printf("Usage: sensor <command> [args...]\n");
+    printf("Commands:\n");
+    printf("  info      - Show sensor info\n");
+    printf("  start     - Start all sensors\n");
+    printf("  stop      - Stop all sensors\n");
+    printf("  start <type> - Start specific sensor\n");
+    printf("  stop <type>  - Stop specific sensor\n");
+    printf("  read <type>  - Read data from sensor\n");
+    printf("  mode <type> <mode> - Set sensor power mode\n");
+    printf("  rate <type> <rate> - Set sensor rate\n");
+    printf("I2C debugging:\n");
+    printf("  scan      - Scan I2C bus for devices\n");
+    printf("  i2c_read <dev_addr> <reg_addr> [len=1] - Read register(s)\n");
+    printf("  i2c_write <dev_addr> <reg_addr> <value1> [value2...] - Write register(s)\n");
+    printf("  dump <dev_addr> <start_reg> <end_reg> - Dump register range\n");
+    printf("where <type> is: mag, accel, gyro, temp, press, hum\n");
+    printf("and <mode> is: off, low, normal, high\n");
+    printf("and <rate> is: off, low, normal, high, vhigh\n");
+}
+
+// Helper function to parse sensor type from command line
+static sensor_type_t parse_sensor_type(const char* type_str) {
+    if (strcmp(type_str, "mag") == 0) {
+        return SENSOR_TYPE_MAGNETOMETER;
+    } else if (strcmp(type_str, "accel") == 0) {
+        return SENSOR_TYPE_ACCELEROMETER;
+    } else if (strcmp(type_str, "gyro") == 0) {
+        return SENSOR_TYPE_GYROSCOPE;
+    } else if (strcmp(type_str, "temp") == 0) {
+        return SENSOR_TYPE_TEMPERATURE;
+    } else if (strcmp(type_str, "press") == 0) {
+        return SENSOR_TYPE_PRESSURE;
+    } else if (strcmp(type_str, "hum") == 0) {
+        return SENSOR_TYPE_HUMIDITY;
+    }
+    
+    return SENSOR_TYPE_UNKNOWN;
+}
+
+// Helper function to convert sensor type to string
+static const char* sensor_type_to_string(sensor_type_t type) {
+    switch (type) {
+        case SENSOR_TYPE_ACCELEROMETER: return "Accelerometer";
+        case SENSOR_TYPE_GYROSCOPE:     return "Gyroscope";
+        case SENSOR_TYPE_MAGNETOMETER:  return "Magnetometer";
+        case SENSOR_TYPE_PRESSURE:      return "Pressure";
+        case SENSOR_TYPE_TEMPERATURE:   return "Temperature";
+        case SENSOR_TYPE_HUMIDITY:      return "Humidity";
+        case SENSOR_TYPE_LIGHT:         return "Light";
+        case SENSOR_TYPE_PROXIMITY:     return "Proximity";
+        case SENSOR_TYPE_IMU:           return "IMU";
+        case SENSOR_TYPE_ENV:           return "Environmental";
+        default:                        return "Unknown";
+    }
+}
+
+// Command handler for 'info' command
+static int handle_sensor_info(sensor_manager_t manager) {
+    printf("Sensor Manager Status:\n");
+    
+    // Get scheduler task info to display task ID
+    int task_id = -1;
+    for (int i = 0; i < 100; i++) {
+        task_control_block_t tcb;
+        if ((scheduler_get_task_info(i, &tcb)) && (strcmp(tcb.name, "sensor_mgr") == 0)) {
+            task_id = i;
+            break;
+        }
+    }
+    
+    printf("Task ID: %d\n", task_id);
+    
+    // Check if sensors are available
+    printf("Registered sensors:\n");
+    sensor_type_t types[SENSOR_MANAGER_MAX_SENSORS];
+    bool statuses[SENSOR_MANAGER_MAX_SENSORS];
+    int count = sensor_manager_get_all_statuses(manager, types, statuses, SENSOR_MANAGER_MAX_SENSORS);
+    
+    if (count == 0) {
+        printf("  No sensors found\n");
+    } else {
+        for (int i = 0; i < count; i++) {
+            printf("  - %s: %s\n", 
+                sensor_type_to_string(types[i]), 
+                statuses[i] ? "Running" : "Stopped");
+        }
+    }
+    
+    return 0;
+}
+
+// Command handler for 'scan' command
+static int handle_sensor_scan(sensor_manager_t manager) {
+    i2c_driver_ctx_t* i2c_ctx = sensor_manager_get_i2c_context(manager);
+    
+    if (i2c_ctx == NULL) {
+        printf("Could not access I2C driver context\n");
+        return 1;
+    }
+    
+    return sensor_i2c_scan(i2c_ctx);
+}
+
+// Command handler for 'i2c_read' command
+static int handle_sensor_i2c_read(sensor_manager_t manager, int argc, char* argv[]) {
+    if (argc < 4) {
+        printf("Usage: sensor i2c_read <dev_addr> <reg_addr> [len=1]\n");
+        return 1;
+    }
+    
+    i2c_driver_ctx_t* i2c_ctx = sensor_manager_get_i2c_context(manager);
+    
+    if (i2c_ctx == NULL) {
+        printf("Could not access I2C driver context\n");
+        return 1;
+    }
+    
+    uint8_t dev_addr = (uint8_t)strtol(argv[2], NULL, 0);
+    uint8_t reg_addr = (uint8_t)strtol(argv[3], NULL, 0);
+    uint8_t len = 1;
+    
+    if (argc > 4) {
+        len = (uint8_t)strtol(argv[4], NULL, 0);
+    }
+    
+    return sensor_i2c_read(i2c_ctx, dev_addr, reg_addr, len);
+}
+
+// Command handler for 'i2c_write' command
+static int handle_sensor_i2c_write(sensor_manager_t manager, int argc, char* argv[]) {
+    if (argc < 5) {
+        printf("Usage: sensor i2c_write <dev_addr> <reg_addr> <value1> [value2...]\n");
+        return 1;
+    }
+    
+    i2c_driver_ctx_t* i2c_ctx = sensor_manager_get_i2c_context(manager);
+    
+    if (i2c_ctx == NULL) {
+        printf("Could not access I2C driver context\n");
+        return 1;
+    }
+    
+    uint8_t dev_addr = (uint8_t)strtol(argv[2], NULL, 0);
+    uint8_t reg_addr = (uint8_t)strtol(argv[3], NULL, 0);
+    
+    uint8_t data[32]; // Maximum 32 bytes
+    uint8_t len = 0;
+    
+    for (int i = 4; i < argc; i++) {
+        if (len >= sizeof(data)) {
+            break;
+        }
+        data[len++] = (uint8_t)strtol(argv[i], NULL, 0);
+    }
+    
+    return sensor_i2c_write(i2c_ctx, dev_addr, reg_addr, data, len);
+}
+
+// Command handler for 'dump' command
+static int handle_sensor_dump(sensor_manager_t manager, int argc, char* argv[]) {
+    if (argc < 5) {
+        printf("Usage: sensor dump <dev_addr> <start_reg> <end_reg>\n");
+        return 1;
+    }
+    
+    i2c_driver_ctx_t* i2c_ctx = sensor_manager_get_i2c_context(manager);
+    
+    if (i2c_ctx == NULL) {
+        printf("Could not access I2C driver context\n");
+        return 1;
+    }
+    
+    uint8_t dev_addr = (uint8_t)strtol(argv[2], NULL, 0);
+    uint8_t start_reg = (uint8_t)strtol(argv[3], NULL, 0);
+    uint8_t end_reg = (uint8_t)strtol(argv[4], NULL, 0);
+    
+    printf("Register dump for device 0x%02X (registers 0x%02X to 0x%02X):\n", 
+           dev_addr, start_reg, end_reg);
+    printf("Reg | Value (hex) | Value (dec)\n");
+    printf("----+------------+------------\n");
+    
+    for (uint8_t reg = start_reg; reg <= end_reg; reg++) {
+        uint8_t value;
+        bool success = i2c_driver_read_bytes(i2c_ctx, dev_addr, reg, &value, 1);
+        
+        if (success) {
+            printf("0x%02X | 0x%02X       | %3d\n", reg, value, value);
+        } else {
+            printf("0x%02X | -- (read failed) --\n", reg);
+        }
+    }
+    
+    return 0;
+}
+
+// Command handler for 'start' command
+static int handle_sensor_start(sensor_manager_t manager, int argc, char* argv[]) {
+    if (argc > 2) {
+        // Start specific sensor
+        sensor_type_t type = parse_sensor_type(argv[2]);
+        if (type == SENSOR_TYPE_UNKNOWN) {
+            printf("Unknown sensor type: %s\n", argv[2]);
+            return 1;
+        }
+        
+        if (sensor_manager_start_sensor(manager, type)) {
+            printf("Started sensor: %s\n", argv[2]);
+        } else {
+            printf("Failed to start sensor: %s\n", argv[2]);
+            return 1;
+        }
+    } else {
+        // Start all sensors
+        if (sensor_manager_start_all(manager)) {
+            printf("Started all sensors\n");
+        } else {
+            printf("Failed to start all sensors\n");
+            return 1;
+        }
+    }
+    
+    return 0;
+}
+
+// Command handler for 'stop' command
+static int handle_sensor_stop(sensor_manager_t manager, int argc, char* argv[]) {
+    if (argc > 2) {
+        // Stop specific sensor
+        sensor_type_t type = parse_sensor_type(argv[2]);
+        if (type == SENSOR_TYPE_UNKNOWN) {
+            printf("Unknown sensor type: %s\n", argv[2]);
+            return 1;
+        }
+        
+        if (sensor_manager_stop_sensor(manager, type)) {
+            printf("Stopped sensor: %s\n", argv[2]);
+        } else {
+            printf("Failed to stop sensor: %s\n", argv[2]);
+            return 1;
+        }
+    } else {
+        // Stop all sensors
+        if (sensor_manager_stop_all(manager)) {
+            printf("Stopped all sensors\n");
+        } else {
+            printf("Failed to stop all sensors\n");
+            return 1;
+        }
+    }
+    
+    return 0;
+}
+
+// Command handler for 'read' command
+static int handle_sensor_read(sensor_manager_t manager, int argc, char* argv[]) {
+    if (argc < 3) {
+        printf("Specify sensor type to read\n");
+        return 1;
+    }
+    
+    sensor_type_t type = parse_sensor_type(argv[2]);
+    if (type == SENSOR_TYPE_UNKNOWN) {
+        printf("Unknown sensor type: %s\n", argv[2]);
+        return 1;
+    }
+    
+    sensor_data_t data;
+    if (sensor_manager_get_data(manager, type, &data)) {
+        // Print formatted sensor data
+        switch(type) {
+            case SENSOR_TYPE_MAGNETOMETER:
+                printf("MAG: X: %.2f, Y: %.2f, Z: %.2f\n", 
+                    data.xyz.x, data.xyz.y, data.xyz.z);
+                break;
+            
+            case SENSOR_TYPE_ACCELEROMETER:
+                printf("ACCEL: X: %.2f, Y: %.2f, Z: %.2f\n", 
+                    data.xyz.x, data.xyz.y, data.xyz.z);
+                break;
+                
+            case SENSOR_TYPE_GYROSCOPE:
+                printf("GYRO: X: %.2f, Y: %.2f, Z: %.2f\n", 
+                    data.xyz.x, data.xyz.y, data.xyz.z);
+                break;
+                
+            case SENSOR_TYPE_TEMPERATURE:
+                printf("TEMP: %.2f °C\n", data.scalar.value);
+                break;
+                
+            case SENSOR_TYPE_PRESSURE:
+                printf("PRESS: %.2f hPa\n", data.scalar.value);
+                break;
+                
+            case SENSOR_TYPE_HUMIDITY:
+                printf("HUM: %.2f %%\n", data.scalar.value);
+                break;
+                
+            default:
+                break;
+        }
+    } else {
+        printf("No data available from sensor: %s\n", argv[2]);
+        return 1;
+    }
+    
+    return 0;
+}
+
+// Parse power mode from string
+static sensor_power_mode_t parse_power_mode(const char* mode_str) {
+    if (strcmp(mode_str, "off") == 0) {
+        return SENSOR_POWER_OFF;
+    } else if (strcmp(mode_str, "low") == 0) {
+        return SENSOR_POWER_LOW;
+    } else if (strcmp(mode_str, "normal") == 0) {
+        return SENSOR_POWER_NORMAL;
+    } else if (strcmp(mode_str, "high") == 0) {
+        return SENSOR_POWER_HIGH;
+    }
+    
+    return SENSOR_POWER_NORMAL; // Default
+}
+
+// Command handler for 'mode' command
+static int handle_sensor_mode(sensor_manager_t manager, int argc, char* argv[]) {
+    if (argc < 4) {
+        printf("Specify sensor type and mode\n");
+        return 1;
+    }
+    
+    sensor_type_t type = parse_sensor_type(argv[2]);
+    if (type == SENSOR_TYPE_UNKNOWN) {
+        printf("Unknown sensor type: %s\n", argv[2]);
+        return 1;
+    }
+    
+    sensor_power_mode_t mode = parse_power_mode(argv[3]);
+    if (mode == SENSOR_POWER_NORMAL && strcmp(argv[3], "normal") != 0) {
+        printf("Unknown power mode: %s\n", argv[3]);
+        return 1;
+    }
+    
+    if (sensor_manager_set_power_mode(manager, type, mode)) {
+        printf("Set power mode for %s to %s\n", argv[2], argv[3]);
+    } else {
+        printf("Failed to set power mode\n");
+        return 1;
+    }
+    
+    return 0;
+}
+
+// Parse sensor rate from string
+static sensor_rate_t parse_sensor_rate(const char* rate_str) {
+    if (strcmp(rate_str, "off") == 0) {
+        return SENSOR_RATE_OFF;
+    } else if (strcmp(rate_str, "low") == 0) {
+        return SENSOR_RATE_LOW;
+    } else if (strcmp(rate_str, "normal") == 0) {
+        return SENSOR_RATE_NORMAL;
+    } else if (strcmp(rate_str, "high") == 0) {
+        return SENSOR_RATE_HIGH;
+    } else if (strcmp(rate_str, "vhigh") == 0) {
+        return SENSOR_RATE_VERY_HIGH;
+    }
+    
+    return SENSOR_RATE_NORMAL; // Default
+}
+
+// Command handler for 'rate' command
+static int handle_sensor_rate(sensor_manager_t manager, int argc, char* argv[]) {
+    if (argc < 4) {
+        printf("Specify sensor type and rate\n");
+        return 1;
+    }
+    
+    sensor_type_t type = parse_sensor_type(argv[2]);
+    if (type == SENSOR_TYPE_UNKNOWN) {
+        printf("Unknown sensor type: %s\n", argv[2]);
+        return 1;
+    }
+    
+    sensor_rate_t rate = parse_sensor_rate(argv[3]);
+    if (rate == SENSOR_RATE_NORMAL && strcmp(argv[3], "normal") != 0) {
+        printf("Unknown rate: %s\n", argv[3]);
+        return 1;
+    }
+    
+    if (sensor_manager_set_rate(manager, type, rate)) {
+        printf("Set rate for %s to %s\n", argv[2], argv[3]);
+    } else {
+        printf("Failed to set rate\n");
+        return 1;
+    }
+    
+    return 0;
+}
+
+// Command handler for 'status' command
+static int handle_sensor_status(sensor_manager_t manager) {
+    sensor_type_t types[SENSOR_MANAGER_MAX_SENSORS];
+    bool statuses[SENSOR_MANAGER_MAX_SENSORS];
+    
+    int count = sensor_manager_get_all_statuses(manager, types, statuses, SENSOR_MANAGER_MAX_SENSORS);
+    
+    if (count == 0) {
+        printf("No sensors found\n");
+    } else {
+        printf("Sensor Status:\n");
+        for (int i = 0; i < count; i++) {
+            printf("  %s: %s\n", 
+                sensor_type_to_string(types[i]), 
+                statuses[i] ? "RUNNING" : "STOPPED");
+        }
+    }
+    
+    return 0;
+}
+
+// Main sensor command handler with routing to specific handlers
 int cmd_sensor(int argc, char *argv[]) {
     if (argc < 2) {
-        printf("Usage: sensor <command> [args...]\n");
-        printf("Commands:\n");
-        printf("  info      - Show sensor info\n");
-        printf("  start     - Start all sensors\n");
-        printf("  stop      - Stop all sensors\n");
-        printf("  start <type> - Start specific sensor\n");
-        printf("  stop <type>  - Stop specific sensor\n");
-        printf("  read <type>  - Read data from sensor\n");
-        printf("  mode <type> <mode> - Set sensor power mode\n");
-        printf("  rate <type> <rate> - Set sensor rate\n");
-        printf("I2C debugging:\n");
-        printf("  scan      - Scan I2C bus for devices\n");
-        printf("  i2c_read <dev_addr> <reg_addr> [len=1] - Read register(s)\n");
-        printf("  i2c_write <dev_addr> <reg_addr> <value1> [value2...] - Write register(s)\n");
-        printf("  dump <dev_addr> <start_reg> <end_reg> - Dump register range\n");
-        printf("where <type> is: mag, accel, gyro, temp, press, hum\n");
-        printf("and <mode> is: off, low, normal, high\n");
-        printf("and <rate> is: off, low, normal, high, vhigh\n");
+        print_sensor_usage();
         return 1;
     }
 
-    // Get the sensor manager instance through the accessor function
+    // Get the sensor manager instance
     sensor_manager_t manager = sensor_manager_get_instance();
     if (manager == NULL) {
         printf("Sensor manager not initialized\n");
         return 1;
     }
     
-    // Get access to the I2C driver context for raw operations
-    i2c_driver_ctx_t* i2c_ctx = NULL;
-    
-    // Attempt to get I2C context from the sensor manager
-    // You'll need to add a method to get this from your manager
-    // Here we're assuming it's stored in a global or can be accessed
-    // through the manager or another component
-    
-    // Parse sensor type if present
-    sensor_type_t type = SENSOR_TYPE_UNKNOWN;
-    if (argc > 2) {
-        if (strcmp(argv[2], "mag") == 0) {
-            type = SENSOR_TYPE_MAGNETOMETER;
-        } else if (strcmp(argv[2], "accel") == 0) {
-            type = SENSOR_TYPE_ACCELEROMETER;
-        } else if (strcmp(argv[2], "gyro") == 0) {
-            type = SENSOR_TYPE_GYROSCOPE;
-        } else if (strcmp(argv[2], "temp") == 0) {
-            type = SENSOR_TYPE_TEMPERATURE;
-        } else if (strcmp(argv[2], "press") == 0) {
-            type = SENSOR_TYPE_PRESSURE;
-        } else if (strcmp(argv[2], "hum") == 0) {
-            type = SENSOR_TYPE_HUMIDITY;
-        }
-    }
-
-    // Handle standard sensor commands
+    // Route to appropriate command handler
     if (strcmp(argv[1], "info") == 0) {
-        // Existing info command implementation
-        printf("Sensor Manager Status:\n");
-        
-        // Get scheduler task info to display task ID
-        int task_id = -1;
-        for (int i = 0; i < 100; i++) {  // Search for the sensor manager task
-            task_control_block_t tcb;
-            if ((scheduler_get_task_info(i, &tcb)) && (strcmp(tcb.name, "sensor_mgr") == 0)) {
-                task_id = i;
-                break;
-            }
-        }
-        
-        printf("Task ID: %d\n", task_id);
-        
-        // Check if sensors are available
-        printf("Registered sensors:\n");
-        sensor_type_t types[SENSOR_MANAGER_MAX_SENSORS];
-        bool statuses[SENSOR_MANAGER_MAX_SENSORS];
-        int count = sensor_manager_get_all_statuses(manager, types, statuses, SENSOR_MANAGER_MAX_SENSORS);
-        
-        if (count == 0) {
-            printf("  No sensors found\n");
-        } else {
-            for (int i = 0; i < count; i++) {
-                char type_name[14] = "Unknown";
-                
-                // Convert type to string
-                switch (types[i]) {
-                    case SENSOR_TYPE_ACCELEROMETER: strncpy(type_name, "Accelerometer", 14); break;
-                    case SENSOR_TYPE_GYROSCOPE: strncpy(type_name, "Gyroscope", 14); break;
-                    case SENSOR_TYPE_MAGNETOMETER: strncpy(type_name, "Magnetometer", 14); break;
-                    case SENSOR_TYPE_PRESSURE: strncpy(type_name, "Pressure", 14); break;
-                    case SENSOR_TYPE_TEMPERATURE: strncpy(type_name, "Temperature", 14); break;
-                    case SENSOR_TYPE_HUMIDITY: strncpy(type_name, "Humidity", 14); break;
-                    case SENSOR_TYPE_LIGHT: strncpy(type_name, "Light", 14); break;
-                    case SENSOR_TYPE_PROXIMITY: strncpy(type_name, "Proximity", 14); break;
-                    case SENSOR_TYPE_IMU: strncpy(type_name, "IMU", 14); break;
-                    case SENSOR_TYPE_ENV: strncpy(type_name, "Environmental", 14); break;
-                    default: strncpy(type_name, "Unknown", 14); break;
-                }
-                
-                printf("  - %s: %s\n", type_name, statuses[i] ? "Running" : "Stopped");
-            }
-        }
-
-        return 0;
+        return handle_sensor_info(manager);
     } else if (strcmp(argv[1], "scan") == 0) {
-        // Get I2C context from wherever it's available
-        // This might be from the sensor manager or from sensor_manager_init
-        i2c_ctx = sensor_manager_get_i2c_context(manager);
-        
-        if (i2c_ctx == NULL) {
-            printf("Could not access I2C driver context\n");
-            return 1;
-        }
-        
-        return sensor_i2c_scan(i2c_ctx);
+        return handle_sensor_scan(manager);
     } else if (strcmp(argv[1], "i2c_read") == 0) {
-        if (argc < 4) {
-            printf("Usage: sensor i2c_read <dev_addr> <reg_addr> [len=1]\n");
-            return 1;
-        }
-        
-        i2c_ctx = sensor_manager_get_i2c_context(manager);
-        
-        if (i2c_ctx == NULL) {
-            printf("Could not access I2C driver context\n");
-            return 1;
-        }
-        
-        uint8_t dev_addr = (uint8_t)strtol(argv[2], NULL, 0);
-        uint8_t reg_addr = (uint8_t)strtol(argv[3], NULL, 0);
-        uint8_t len = 1;
-        
-        if (argc > 4) {
-            len = (uint8_t)strtol(argv[4], NULL, 0);
-        }
-        
-        return sensor_i2c_read(i2c_ctx, dev_addr, reg_addr, len);
+        return handle_sensor_i2c_read(manager, argc, argv);
     } else if (strcmp(argv[1], "i2c_write") == 0) {
-        if (argc < 5) {
-            printf("Usage: sensor i2c_write <dev_addr> <reg_addr> <value1> [value2...]\n");
-            return 1;
-        }
-        
-        i2c_ctx = sensor_manager_get_i2c_context(manager);
-        
-        if (i2c_ctx == NULL) {
-            printf("Could not access I2C driver context\n");
-            return 1;
-        }
-        
-        uint8_t dev_addr = (uint8_t)strtol(argv[2], NULL, 0);
-        uint8_t reg_addr = (uint8_t)strtol(argv[3], NULL, 0);
-        
-        uint8_t data[32]; // Maximum 32 bytes
-        uint8_t len = 0;
-        
-        for (int i = 4; i < argc; i++) {
-            if (len >= sizeof(data)) {
-                break;
-            }
-            data[len++] = (uint8_t)strtol(argv[i], NULL, 0);
-        }
-        
-        return sensor_i2c_write(i2c_ctx, dev_addr, reg_addr, data, len);
-
+        return handle_sensor_i2c_write(manager, argc, argv);
     } else if (strcmp(argv[1], "dump") == 0) {
-        if (argc < 5) {
-            printf("Usage: sensor dump <dev_addr> <start_reg> <end_reg>\n");
-            return 1;
-        }
-        
-        i2c_ctx = sensor_manager_get_i2c_context(manager);
-        
-        if (i2c_ctx == NULL) {
-            printf("Could not access I2C driver context\n");
-            return 1;
-        }
-        
-        uint8_t dev_addr = (uint8_t)strtol(argv[2], NULL, 0);
-        uint8_t start_reg = (uint8_t)strtol(argv[3], NULL, 0);
-        uint8_t end_reg = (uint8_t)strtol(argv[4], NULL, 0);
-        
-        printf("Register dump for device 0x%02X (registers 0x%02X to 0x%02X):\n", 
-               dev_addr, start_reg, end_reg);
-        printf("Reg | Value (hex) | Value (dec)\n");
-        printf("----+------------+------------\n");
-        
-        for (uint8_t reg = start_reg; reg <= end_reg; reg++) {
-            uint8_t value;
-            bool success = i2c_driver_read_bytes(i2c_ctx, dev_addr, reg, &value, 1);
-            
-            if (success) {
-                printf("0x%02X | 0x%02X       | %3d\n", reg, value, value);
-            } else {
-                printf("0x%02X | -- (read failed) --\n", reg);
-            }
-        }
-        
-        return 0;
-
+        return handle_sensor_dump(manager, argc, argv);
     } else if (strcmp(argv[1], "start") == 0) {
-        if (argc > 2) {
-            // Start specific sensor
-            if (type == SENSOR_TYPE_UNKNOWN) {
-                printf("Unknown sensor type: %s\n", argv[2]);
-                return 1;
-            }
-            
-            if (sensor_manager_start_sensor(manager, type)) {
-                printf("Started sensor: %s\n", argv[2]);
-            } else {
-                printf("Failed to start sensor: %s\n", argv[2]);
-                return 1;
-            }
-        } else {
-            // Start all sensors
-            if (sensor_manager_start_all(manager)) {
-                printf("Started all sensors\n");
-            } else {
-                printf("Failed to start all sensors\n");
-                return 1;
-            }
-        }
-        
+        return handle_sensor_start(manager, argc, argv);
     } else if (strcmp(argv[1], "stop") == 0) {
-        if (argc > 2) {
-            // Stop specific sensor
-            if (type == SENSOR_TYPE_UNKNOWN) {
-                printf("Unknown sensor type: %s\n", argv[2]);
-                return 1;
-            }
-            
-            if (sensor_manager_stop_sensor(manager, type)) {
-                printf("Stopped sensor: %s\n", argv[2]);
-            } else {
-                printf("Failed to stop sensor: %s\n", argv[2]);
-                return 1;
-            }
-        } else {
-            // Stop all sensors
-            if (sensor_manager_stop_all(manager)) {
-                printf("Stopped all sensors\n");
-            } else {
-                printf("Failed to stop all sensors\n");
-                return 1;
-            }
-        }
-        
+        return handle_sensor_stop(manager, argc, argv);
     } else if (strcmp(argv[1], "read") == 0) {
-        if (argc < 3) {
-            printf("Specify sensor type to read\n");
-            return 1;
-        }
-        
-        if (type == SENSOR_TYPE_UNKNOWN) {
-            printf("Unknown sensor type: %s\n", argv[2]);
-            return 1;
-        }
-        
-        sensor_data_t data;
-        if (sensor_manager_get_data(manager, type, &data)) {
-            // Data will be printed by the callback, but we can also print it here
-            switch(type) {
-                case SENSOR_TYPE_MAGNETOMETER:
-                    printf("MAG: X: %.2f, Y: %.2f, Z: %.2f\n", 
-                        data.xyz.x, data.xyz.y, data.xyz.z);
-                    break;
-                
-                case SENSOR_TYPE_ACCELEROMETER:
-                    printf("ACCEL: X: %.2f, Y: %.2f, Z: %.2f\n", 
-                        data.xyz.x, data.xyz.y, data.xyz.z);
-                    break;
-                    
-                case SENSOR_TYPE_GYROSCOPE:
-                    printf("GYRO: X: %.2f, Y: %.2f, Z: %.2f\n", 
-                        data.xyz.x, data.xyz.y, data.xyz.z);
-                    break;
-                    
-                case SENSOR_TYPE_TEMPERATURE:
-                    printf("TEMP: %.2f °C\n", data.scalar.value);
-                    break;
-                    
-                case SENSOR_TYPE_PRESSURE:
-                    printf("PRESS: %.2f hPa\n", data.scalar.value);
-                    break;
-                    
-                case SENSOR_TYPE_HUMIDITY:
-                    printf("HUM: %.2f %%\n", data.scalar.value);
-                    break;
-                    
-                default:
-                    break;
-            }
-        } else {
-            printf("No data available from sensor: %s\n", argv[2]);
-            return 1;
-        }
-        
+        return handle_sensor_read(manager, argc, argv);
     } else if (strcmp(argv[1], "mode") == 0) {
-        if (argc < 4) {
-            printf("Specify sensor type and mode\n");
-            return 1;
-        }
-        
-        if (type == SENSOR_TYPE_UNKNOWN) {
-            printf("Unknown sensor type: %s\n", argv[2]);
-            return 1;
-        }
-        
-        sensor_power_mode_t mode = SENSOR_POWER_NORMAL;
-        if (strcmp(argv[3], "off") == 0) {
-            mode = SENSOR_POWER_OFF;
-        } else if (strcmp(argv[3], "low") == 0) {
-            mode = SENSOR_POWER_LOW;
-        } else if (strcmp(argv[3], "normal") == 0) {
-            mode = SENSOR_POWER_NORMAL;
-        } else if (strcmp(argv[3], "high") == 0) {
-            mode = SENSOR_POWER_HIGH;
-        } else {
-            printf("Unknown power mode: %s\n", argv[3]);
-            return 1;
-        }
-        
-        if (sensor_manager_set_power_mode(manager, type, mode)) {
-            printf("Set power mode for %s to %s\n", argv[2], argv[3]);
-        } else {
-            printf("Failed to set power mode\n");
-            return 1;
-        }
-        
+        return handle_sensor_mode(manager, argc, argv);
     } else if (strcmp(argv[1], "rate") == 0) {
-        if (argc < 4) {
-            printf("Specify sensor type and rate\n");
-            return 1;
-        }
-        
-        if (type == SENSOR_TYPE_UNKNOWN) {
-            printf("Unknown sensor type: %s\n", argv[2]);
-            return 1;
-        }
-        
-        sensor_rate_t rate = SENSOR_RATE_NORMAL;
-        if (strcmp(argv[3], "off") == 0) {
-            rate = SENSOR_RATE_OFF;
-        } else if (strcmp(argv[3], "low") == 0) {
-            rate = SENSOR_RATE_LOW;
-        } else if (strcmp(argv[3], "normal") == 0) {
-            rate = SENSOR_RATE_NORMAL;
-        } else if (strcmp(argv[3], "high") == 0) {
-            rate = SENSOR_RATE_HIGH;
-        } else if (strcmp(argv[3], "vhigh") == 0) {
-            rate = SENSOR_RATE_VERY_HIGH;
-        } else {
-            printf("Unknown rate: %s\n", argv[3]);
-            return 1;
-        }
-        
-        if (sensor_manager_set_rate(manager, type, rate)) {
-            printf("Set rate for %s to %s\n", argv[2], argv[3]);
-        } else {
-            printf("Failed to set rate\n");
-            return 1;
-        }
-        
+        return handle_sensor_rate(manager, argc, argv);
     } else if (strcmp(argv[1], "status") == 0) {
-        sensor_type_t types[SENSOR_MANAGER_MAX_SENSORS];
-        bool statuses[SENSOR_MANAGER_MAX_SENSORS];
-        
-        int count = sensor_manager_get_all_statuses(manager, types, statuses, SENSOR_MANAGER_MAX_SENSORS);
-        
-        if (count == 0) {
-            printf("No sensors found\n");
-        } else {
-            printf("Sensor Status:\n");
-            for (int i = 0; i < count; i++) {
-                char type_name[14] = "Unknown";
-                
-                // Convert type to string
-                switch (types[i]) {
-                    case SENSOR_TYPE_ACCELEROMETER: strncpy(type_name, "Accelerometer", 14); break;
-                    case SENSOR_TYPE_GYROSCOPE: strncpy(type_name, "Gyroscope", 14); break;
-                    case SENSOR_TYPE_MAGNETOMETER: strncpy(type_name, "Magnetometer", 14); break;
-                    case SENSOR_TYPE_PRESSURE: strncpy(type_name, "Pressure", 14); break;
-                    case SENSOR_TYPE_TEMPERATURE: strncpy(type_name, "Temperature", 14); break;
-                    case SENSOR_TYPE_HUMIDITY: strncpy(type_name, "Humidity", 14); break;
-                    case SENSOR_TYPE_LIGHT: strncpy(type_name, "Light", 14); break;
-                    case SENSOR_TYPE_PROXIMITY: strncpy(type_name, "Proximity", 14); break;
-                    case SENSOR_TYPE_IMU: strncpy(type_name, "IMU", 14); break;
-                    case SENSOR_TYPE_ENV: strncpy(type_name, "Environmental", 14); break;
-                    default: strncpy(type_name, "Unknown", 14); break;
-                }
-                
-                printf("  %s: %s\n", type_name, statuses[i] ? "RUNNING" : "STOPPED");
-            }
-        }
-        
-        return 0;
-        
+        return handle_sensor_status(manager);
     } else {
         printf("Unknown command: %s\n", argv[1]);
+        print_sensor_usage();
         return 1;
     }
-
-    return 0;
 }
 
 // Register sensor commands with the shell
@@ -1264,47 +1338,19 @@ void register_sensor_manager_commands(void) {
     
     shell_register_command(&sensor_command);
 }
-// Function to scan the I2C bus for devices
+
 static int sensor_i2c_scan(i2c_driver_ctx_t* i2c_ctx) {
     if (i2c_ctx == NULL) {
         printf("I2C driver context is NULL\n");
         return 1;
     }
     
-    printf("Scanning I2C bus (7-bit addresses)...\n");
-    printf("     0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F\n");
+    // First do the enhanced scan
+    printf("=== I2C Scan ===\n");
+    int confirmed_devices = i2c_scan(i2c_ctx);
     
-    int devices_found = 0;
+    (void) confirmed_devices;
     
-    for (int addr_prefix = 0; addr_prefix < 8; addr_prefix++) {
-        printf("%01X0: ", addr_prefix);
-        
-        for (int addr_suffix = 0; addr_suffix < 16; addr_suffix++) {
-            uint8_t addr =(uint8_t) (((addr_prefix << 4) | addr_suffix) & 0xFF);
-            
-            // Skip reserved addresses
-            if (addr < 0x08 || addr > 0x77) {
-                printf("   ");
-                continue;
-            }
-            
-            // Try to read a single byte from the device
-            uint8_t data;
-            bool success = false;
-            
-            success = i2c_driver_read_bytes(i2c_ctx, addr, 0, &data, 1);
-            
-            if (success) {
-                printf("%02X ", addr);
-                devices_found++;
-            } else {
-                printf("-- ");
-            }
-        }
-        printf("\n");
-    }
-    
-    printf("Scan complete. %d devices found.\n", devices_found);
     return 0;
 }
 

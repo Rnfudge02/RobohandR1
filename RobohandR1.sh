@@ -379,37 +379,37 @@ generate_prompt_template() {
         echo -e "Core Files:\n" >> $prompt_file
         
         if [ $include_core_init -eq 1 ]; then
-            log_message "INFO" "Listing Core/Init files"
-            find ./Src/Core/Init -type f | sort >> $prompt_file
+            log_message "INFO" "Listing Kernel Init file"
+            find ./Src/Kernel/kernel_init.c -type f | sort >> $prompt_file
         fi
         
         if [ $include_core_manager -eq 1 ]; then
-            log_message "INFO" "Listing Core/Manager files"
-            find ./Src/Core/Manager -type f | sort >> $prompt_file
+            log_message "INFO" "Listing Kernel/Manager files"
+            find ./Src/Kernel/Manager -type f | sort >> $prompt_file
         fi
         
         if [ $include_core_scheduler -eq 1 ]; then
-            log_message "INFO" "Listing Core/Scheduler files"
-            find ./Src/Core/Scheduler -type f | sort >> $prompt_file
+            log_message "INFO" "Listing Kernel/Scheduler files"
+            find ./Src/Kernel/Scheduler -type f | sort >> $prompt_file
         fi
         
         if [ $include_core_shell -eq 1 ]; then
-            log_message "INFO" "Listing Core/Shell files"
-            find ./Src/Core/Shell -type f | sort >> $prompt_file
+            log_message "INFO" "Listing Programs/Shell files"
+            find ./Src/Programs/Shell -type f | sort >> $prompt_file
         fi
         
         if [ $include_core_stats -eq 1 ]; then
-            log_message "INFO" "Listing Core/Stats files"
-            find ./Src/Core/Stats -type f | sort >> $prompt_file
+            log_message "INFO" "Listing Programs/Stats files"
+            find ./Src/Programs/Stats -type f | sort >> $prompt_file
         fi
         
         echo -e "\n" >> $prompt_file
     fi
     
     if [ $include_components -eq 1 ]; then
-        log_message "INFO" "Listing Component files"
-        echo -e "Component Files:\n" >> $prompt_file
-        find ./Src/Components -type f | sort >> $prompt_file
+        log_message "INFO" "Listing program files"
+        echo -e "Program Files:\n" >> $prompt_file
+        find ./Src/Programs -type f | sort >> $prompt_file
         echo -e "\n" >> $prompt_file
     fi
     
@@ -447,8 +447,8 @@ generate_prompt_template() {
     
     # Core submodules content
     if [ $include_core_init -eq 1 ]; then
-        log_message "INFO" "Adding Core/Init code content"
-        for FILE in $(find ./Src/Core/Init -type f | sort); do
+        log_message "INFO" "Adding Kernel Init code content"
+        for FILE in $(find ./Src/Kernel/init -type f | sort); do
             if [ -f "$FILE" ]; then
                 echo -e "\n// File: $FILE" >> $prompt_file
                 cat $FILE >> $prompt_file
@@ -457,8 +457,8 @@ generate_prompt_template() {
     fi
     
     if [ $include_core_manager -eq 1 ]; then
-        log_message "INFO" "Adding Core/Manager code content"
-        for FILE in $(find ./Src/Core/Manager -type f | sort); do
+        log_message "INFO" "Adding Kernel/Manager code content"
+        for FILE in $(find ./Src/Kernel/Manager -type f | sort); do
             if [ -f "$FILE" ]; then
                 echo -e "\n// File: $FILE" >> $prompt_file
                 cat $FILE >> $prompt_file
@@ -467,8 +467,8 @@ generate_prompt_template() {
     fi
     
     if [ $include_core_scheduler -eq 1 ]; then
-        log_message "INFO" "Adding Core/Scheduler code content"
-        for FILE in $(find ./Src/Core/Scheduler -type f | sort); do
+        log_message "INFO" "Adding Kernel/Scheduler code content"
+        for FILE in $(find ./Src/Kernel/Scheduler -type f | sort); do
             if [ -f "$FILE" ]; then
                 echo -e "\n// File: $FILE" >> $prompt_file
                 cat $FILE >> $prompt_file
@@ -477,8 +477,8 @@ generate_prompt_template() {
     fi
     
     if [ $include_core_shell -eq 1 ]; then
-        log_message "INFO" "Adding Core/Shell code content"
-        for FILE in $(find ./Src/Core/Shell -type f | sort); do
+        log_message "INFO" "Adding Programs/Shell code content"
+        for FILE in $(find ./Src/Programs/Shell -type f | sort); do
             if [ -f "$FILE" ]; then
                 echo -e "\n// File: $FILE" >> $prompt_file
                 cat $FILE >> $prompt_file
@@ -487,8 +487,8 @@ generate_prompt_template() {
     fi
     
     if [ $include_core_stats -eq 1 ]; then
-        log_message "INFO" "Adding Core/Stats code content"
-        for FILE in $(find ./Src/Core/Stats -type f | sort); do
+        log_message "INFO" "Adding Programs/Stats code content"
+        for FILE in $(find ./Src/Programs/Stats -type f | sort); do
             if [ -f "$FILE" ]; then
                 echo -e "\n// File: $FILE" >> $prompt_file
                 cat $FILE >> $prompt_file
@@ -497,8 +497,8 @@ generate_prompt_template() {
     fi
 
     if [ $include_components -eq 1 ]; then
-        log_message "INFO" "Adding Components code content"
-        for FILE in $(find ./Src/Components -type f | sort); do
+        log_message "INFO" "Adding Program code content"
+        for FILE in $(find ./Src/Programs -type f | sort); do
             if [ -f "$FILE" ]; then
                 echo -e "\n// File: $FILE" >> $prompt_file
                 cat $FILE >> $prompt_file

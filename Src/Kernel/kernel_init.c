@@ -100,7 +100,7 @@ static kernel_result_t init_logging(void) {
     log_set_level(LOG_LEVEL_ERROR, LOG_DEST_FLASH);
     
     // Log a message to confirm
-    LOG_INFO("Kernel Init", "Logging system initialized");
+    log_message(LOG_LEVEL_INFO, "Kernel Init", "Logging system initialized");
     
     return SYS_INIT_OK;
 }
@@ -110,11 +110,11 @@ static kernel_result_t init_logging(void) {
  */
 static kernel_result_t init_scheduler(void) {
 
-    LOG_INFO("Kernel Init", "Initializing system...");
+    log_message(LOG_LEVEL_INFO, "Kernel Init", "Initializing system...");
 
     
     if (!scheduler_init()) {
-        LOG_ERROR("Kernel Init", "ERROR: Failed to initialize scheduler.");
+        log_message(LOG_LEVEL_ERROR, "Kernel Init", "ERROR: Failed to initialize scheduler.");
         return SYS_INIT_ERROR_SCHEDULER;
     }
 
@@ -131,7 +131,7 @@ static kernel_result_t init_shell(void) {
     }
     
     
-    LOG_INFO("Kernel Init", "Initializing shell...");
+    log_message(LOG_LEVEL_INFO, "Kernel Init", "Initializing shell...");
 
     
     // Initialize shell
@@ -140,7 +140,7 @@ static kernel_result_t init_shell(void) {
     // Register shell commands
     register_shell_commands();
     
-    LOG_INFO("Kernel Init", "Shell initialized");
+    log_message(LOG_LEVEL_INFO, "Kernel Init", "Shell initialized");
     
     // Create the shell task
     kernel_result_t result = init_shell_task();
@@ -156,17 +156,17 @@ static kernel_result_t init_shell(void) {
  */
 static kernel_result_t init_sensors(void) {
     if (!(system_config.flags & SYS_INIT_FLAG_SENSORS)) {
-        LOG_ERROR("Kernel Init", "Sensors disabled.");
+        log_message(LOG_LEVEL_ERROR, "Kernel Init", "Sensors disabled.");
         return SYS_INIT_OK; // Sensors not requested
     }
     
     // Initialize sensor manager
     if (!sensor_manager_init()) {
-        LOG_ERROR("Kernel Init", "Failed to initialize sensor manager.");
+        log_message(LOG_LEVEL_ERROR, "Kernel Init", "Failed to initialize sensor manager.");
         return SYS_INIT_ERROR_SENSOR_MANAGER;
     }
     
-    LOG_INFO("Kernel Init", "Sensor manager initialized.");
+    log_message(LOG_LEVEL_INFO, "Kernel Init", "Sensor manager initialized.");
     
     return SYS_INIT_OK;
 }
@@ -177,7 +177,7 @@ static kernel_result_t init_sensors(void) {
  * @brief Register shell commands
  */
 static void register_shell_commands(void) {
-    LOG_DEBUG("Kernel Init", "Registering shell commands.");
+    log_message(LOG_LEVEL_DEBUG, "Kernel Init", "Registering shell commands.");
     
     // Register core commands
     register_scheduler_commands();
@@ -195,8 +195,7 @@ static void register_shell_commands(void) {
     if (system_config.flags & SYS_INIT_FLAG_TZ) {
         register_tz_commands();
     }
-    
-    
+
     // Register sensor commands if sensors enabled
     if (system_config.flags & SYS_INIT_FLAG_SENSORS) {
         register_sensor_manager_commands();
@@ -209,7 +208,7 @@ static void register_shell_commands(void) {
     // Register application-specific commands
     kernel_register_commands();
     
-    LOG_DEBUG("Kernel Init", "Shell commands registered");
+    log_message(LOG_LEVEL_DEBUG, "Kernel Init", "Shell commands registered");
 }
 
 /**
@@ -242,15 +241,9 @@ kernel_result_t kernel_init(const kernel_config_t* config) {
     
     // Print welcome banner
     print_banner();
-    
-    // Initialize scheduler (required)
-    result = init_scheduler();
-    if (result != SYS_INIT_OK) {
-        return result;
-    }
 
     if (!hw_spinlock_manager_register_with_scheduler()) {
-        LOG_ERROR("Kernel Init", "Failed to register hardware spinlock manager with scheduler");
+        log_message(LOG_LEVEL_ERROR, "Kernel Init", "Failed to register hardware spinlock manager with scheduler");
         return SYS_INIT_ERROR_GENERAL;
     }
     
@@ -278,18 +271,18 @@ kernel_result_t kernel_init(const kernel_config_t* config) {
     }
     
     // Start scheduler - MOVED BEFORE shell task creation
-    LOG_INFO("Kernel Init", "Starting scheduler.");
+    log_message(LOG_LEVEL_INFO, "Kernel Init", "Starting scheduler.");
     if (!scheduler_start()) {
-        LOG_FATAL("Kernel Init", "Failed to start scheduler.");
+        log_message(LOG_LEVEL_FATAL, "Kernel Init", "Failed to start scheduler.");
         return SYS_INIT_ERROR_SCHEDULER;
     }
 
     // If servos are enabled, ensure the servo task is created
     if (system_config.flags & SYS_INIT_FLAG_SERVOS) {
         if (servo_manager_ensure_task()) {
-            LOG_INFO("Kernel Init", "Servo manager task confirmed");
+            log_message(LOG_LEVEL_INFO, "Kernel Init", "Servo manager task confirmed");
         } else {
-            LOG_WARN("Kernel Init", "Could not create servo manager task");
+            log_message(LOG_LEVEL_WARN, "Kernel Init", "Could not create servo manager task");
         }
     }
     
@@ -298,7 +291,7 @@ kernel_result_t kernel_init(const kernel_config_t* config) {
         uint32_t timeout_ms = system_config.watchdog_timeout_ms;
         if (timeout_ms < 100) timeout_ms = 100;  // Minimum 100ms
         
-        LOG_INFO("Kernel Init", "Enabling watchdog with %lu ms timeout", timeout_ms);
+        log_message(LOG_LEVEL_INFO, "Kernel Init", "Enabling watchdog with %lu ms timeout", timeout_ms);
         watchdog_enable(timeout_ms, true);
         watchdog_enabled = true;
     }
@@ -306,7 +299,7 @@ kernel_result_t kernel_init(const kernel_config_t* config) {
     // Mark system as initialized
     system_initialized = true;
     
-    LOG_INFO("Kernel Init", "System initialization complete");
+    log_message(LOG_LEVEL_INFO, "Kernel Init", "System initialization complete");
     
     return SYS_INIT_OK;
 }
@@ -339,7 +332,7 @@ void kernel_run(void) {
         return;
     }
     
-    LOG_INFO("System Runtime", "Entering main system loop");
+    log_message(LOG_LEVEL_INFO, "Kernel Runtime", "Entering main system loop.");
     
     // Print initial prompt again to be sure
     printf("> ");
@@ -349,9 +342,6 @@ void kernel_run(void) {
     uint32_t last_stat_time = to_ms_since_boot(get_absolute_time());
     
     while (1) {
-        log_process();
-
-        
         // Run scheduler tasks
         scheduler_run_pending_tasks();
         
@@ -360,11 +350,11 @@ void kernel_run(void) {
             watchdog_update();
         }
         
-        // Print statistics every 60 seconds in verbose mode
+        // Print statistics every 60 seconds
         uint32_t current_time = to_ms_since_boot(get_absolute_time());
         if (current_time - last_stat_time > 60000) {
             
-            LOG_DEBUG("System Runtime", "System uptime: %lu ms", kernel_get_uptime_ms());
+            log_message(LOG_LEVEL_DEBUG, "Kernel Runtime", "System uptime: %lu ms", kernel_get_uptime_ms());
             last_stat_time = current_time;
         }
         
@@ -389,7 +379,7 @@ __attribute__((weak)) void kernel_register_commands(void) {
  * @brief Handle system shutdown
  */
 void kernel_shutdown(bool restart) {
-    LOG_INFO("Kernel Init", "System shutdown initiated, restart = %d", restart);
+    log_message(LOG_LEVEL_INFO, "Kernel Init", "System shutdown initiated, restart = %d", restart);
     
     // Stop scheduler
     scheduler_stop();
@@ -407,7 +397,7 @@ void kernel_shutdown(bool restart) {
     
     // If restarting, trigger watchdog reset
     if (restart) {
-        LOG_INFO("Kernel Init", "Restarting system...");
+        log_message(LOG_LEVEL_INFO, "Kernel Init", "Restarting system...");
         sleep_ms(100);
         
         // Trigger reset
@@ -418,7 +408,7 @@ void kernel_shutdown(bool restart) {
     }
     
     // Otherwise, just halt
-    LOG_INFO("Kernel Init", "System halted");
+    log_message(LOG_LEVEL_INFO, "Kernel Init", "System halted");
     while (1) {
         // Infinite loop
         __wfi();  // Wait for interrupt (low power)
@@ -468,7 +458,7 @@ static void shell_task_wrapper(void *params) {
  */
 static kernel_result_t init_shell_task(void) {
     if (!(system_config.flags & SYS_INIT_FLAG_SHELL)) {
-        LOG_INFO("Kernel Init", "Shell disabled.");
+        log_message(LOG_LEVEL_INFO, "Kernel Init", "Shell disabled.");
         return SYS_INIT_OK; // Shell not requested
     }
     
@@ -484,12 +474,12 @@ static kernel_result_t init_shell_task(void) {
     );
     
     if (shell_task_id < 0) {
-        LOG_ERROR("Kernel Init", "Failed to create shell task.");
+        log_message(LOG_LEVEL_ERROR, "Kernel Init", "Failed to create shell task.");
         return SYS_INIT_ERROR_SHELL;
     }
     
-    LOG_INFO("Kernel Init", "Shell task created with ID: %d.", shell_task_id);
-    LOG_INFO("Kernel Init", "Shell task initialized.");
+    log_message(LOG_LEVEL_INFO, "Kernel Init", "Shell task created with ID: %d.", shell_task_id);
+    log_message(LOG_LEVEL_INFO, "Kernel Init", "Shell task initialized.");
     
     return SYS_INIT_OK;
 }
@@ -499,17 +489,17 @@ static kernel_result_t init_shell_task(void) {
  */
 static kernel_result_t init_servos(void) {
     if (!(system_config.flags & SYS_INIT_FLAG_SERVOS)) {
-        LOG_INFO("Kernel Init", "Servo initialization disabled.");
+        log_message(LOG_LEVEL_INFO, "Kernel Init", "Servo initialization disabled.");
         return SYS_INIT_OK; // Servos not requested
     }
     
     // Initialize servo manager
     if (!servo_manager_init()) {
-        LOG_ERROR("Kernel Init", "Failed to initialize servo manager.");
+        log_message(LOG_LEVEL_ERROR, "Kernel Init", "Failed to initialize servo manager.");
         return SYS_INIT_ERROR_GENERAL;
     }
     
-    LOG_INFO("Kernel Init", "Servo manager initialized");
+    log_message(LOG_LEVEL_INFO, "Kernel Init", "Servo manager initialized");
     
     return SYS_INIT_OK;
 }
@@ -523,17 +513,17 @@ static kernel_result_t init_servos(void) {
  */
 static kernel_result_t init_mpu(void) {
     if (!(system_config.flags & SYS_INIT_FLAG_MPU)) {
-        LOG_INFO("Kernel Init", "MPU support disabled.");
+        log_message(LOG_LEVEL_INFO, "Kernel Init", "MPU support disabled.");
         return SYS_INIT_OK; // MPU not requested
     }
     
     // Initialize MPU
     if (!scheduler_mpu_init()) {
-        LOG_ERROR("Kernel Init", "Failed to initialize MPU.");
+        log_message(LOG_LEVEL_ERROR, "Kernel Init", "Failed to initialize MPU.");
         return SYS_INIT_ERROR_MPU_TZ;
     }
     
-    LOG_INFO("Kernel Init", "MPU initialized successfully.");
+    log_message(LOG_LEVEL_INFO, "Kernel Init", "MPU initialized successfully.");
     
     return SYS_INIT_OK;
 }
@@ -547,26 +537,26 @@ static kernel_result_t init_mpu(void) {
  */
 static kernel_result_t init_trustzone(void) {
     if (!(system_config.flags & SYS_INIT_FLAG_TZ)) {
-        LOG_INFO("Kernel Init", "Trustzone support disabled.");
+        log_message(LOG_LEVEL_INFO, "Kernel Init", "Trustzone support disabled.");
         return SYS_INIT_OK; // TrustZone not requested
     }
     
     // First check if TrustZone is supported by the hardware
     if (!scheduler_tz_is_supported()) {
-        LOG_WARN("Kernel Init", "TrustZone not supported by this hardware.");
+        log_message(LOG_LEVEL_WARN, "Kernel Init", "TrustZone not supported by this hardware.");
         return SYS_INIT_OK; // Not an error, just not supported
     }
     
 
-    LOG_INFO("Kernel Init", "Initializing TrustZone Security Extension...");
+    log_message(LOG_LEVEL_INFO, "Kernel Init", "Initializing TrustZone Security Extension...");
     
     // Initialize TrustZone
     if (!scheduler_tz_init()) {
-        LOG_ERROR("Kernel Init", "Failed to initialize TrustZone");
+        log_message(LOG_LEVEL_ERROR, "Kernel Init", "Failed to initialize TrustZone");
         return SYS_INIT_ERROR_MPU_TZ;
     }
     
-    LOG_INFO("Kernel Init", "TrustZone initialized successfully");
+    log_message(LOG_LEVEL_INFO, "Kernel Init", "TrustZone initialized successfully");
     
     return SYS_INIT_OK;
 }
@@ -638,7 +628,7 @@ static kernel_result_t init_core_subsystems(void) {
     log_set_destinations(LOG_DEST_CONSOLE);
     
     // Log system initialization
-    LOG_INFO("Kernel Init", "Core subsystems initialized");
+    log_message(LOG_LEVEL_INFO, "Kernel Init", "Core subsystems initialized");
     
     return SYS_INIT_OK;
 }

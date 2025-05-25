@@ -81,6 +81,7 @@ typedef bool (*spinlock_registration_callback_t)(spinlock_init_phase_t phase, vo
  * @param task_id ID of task acquiring the lock.
  * @return Save state used to release lock.
  */
+__attribute__((section(".time_critical")))
 uint32_t hw_spinlock_acquire(uint32_t spinlock_num, uint32_t task_id);
 
 /**
@@ -90,6 +91,7 @@ uint32_t hw_spinlock_acquire(uint32_t spinlock_num, uint32_t task_id);
  * @param owner_name Name of spinlock owner.
  * @return Spinlock number allocated to the program.
  */
+__attribute__((section(".time_critical")))
 uint32_t hw_spinlock_allocate(spinlock_category_t category, const char* owner_name);
 
 /**
@@ -101,6 +103,7 @@ uint32_t hw_spinlock_allocate(spinlock_category_t category, const char* owner_na
  * @param self_tracking Set to true if this component will register its spinlock later.
  * @return Hardware spinlock number or UINT_MAX on failure.
  */
+__attribute__((section(".time_critical")))
 uint hw_spinlock_bootstrap_claim(bool self_tracking);
 
 /**
@@ -111,6 +114,7 @@ uint hw_spinlock_bootstrap_claim(bool self_tracking);
  * @param context Pointer to the structure holding the spinlock manager context.
  * @return 0 on success, non-zero on error.
  */
+__attribute__((section(".time_critical")))
 bool hw_spinlock_register_component(const char* component_name, spinlock_registration_callback_t callback, void* context);
 
 /**
@@ -121,6 +125,7 @@ bool hw_spinlock_register_component(const char* component_name, spinlock_registr
  * @param owner_name String representing function owning the spinlock.
  * @return 0 on success, non-zero on error.
  */
+__attribute__((section(".time_critical")))
 bool hw_spinlock_register_external(uint32_t spinlock_num, spinlock_category_t category, const char* owner_name);
 
 /**
@@ -129,6 +134,7 @@ bool hw_spinlock_register_external(uint32_t spinlock_num, spinlock_category_t ca
  * @param spinlock_num Spinlock number to free.
  * @return 0 on success, non-zero on error.
  */
+__attribute__((section(".time_critical")))
 bool hw_spinlock_free(uint32_t spinlock_num);
 
 /**
@@ -137,6 +143,7 @@ bool hw_spinlock_free(uint32_t spinlock_num);
  * @param category Category to retrieve count of.
  * @return number of spinlocks allocated under specified category.
  */
+__attribute__((section(".time_critical")))
 uint32_t hw_spinlock_get_count_by_category(spinlock_category_t category);
 
 /**
@@ -146,6 +153,7 @@ uint32_t hw_spinlock_get_count_by_category(spinlock_category_t category);
  * @param info Pointer to array structure to populate.
  * @return 0 on success, non-zero on error.
  */
+__attribute__((section(".time_critical")))
 bool hw_spinlock_get_info(uint32_t spinlock_num, spinlock_info_t* info);
 
 /**
@@ -155,6 +163,7 @@ bool hw_spinlock_get_info(uint32_t spinlock_num, spinlock_info_t* info);
  * @param argv Array of argument strings.
  * @return 0 on success, non-zero on error.
  */
+__attribute__((section(".time_critical")))
 spinlock_init_phase_t hw_spinlock_get_init_phase(void);
 
 /**
@@ -162,6 +171,7 @@ spinlock_init_phase_t hw_spinlock_get_init_phase(void);
  *
  * @return total number of spinlocks allocated.
  */
+__attribute__((section(".time_critical")))
 uint32_t hw_spinlock_get_total_count(void);
 
 /**
@@ -194,6 +204,7 @@ bool hw_spinlock_manager_init_no_logging(void);
  * @return 0 if uninitialized.
  * @return 1 if initialized.
  */
+__attribute__((section(".time_critical")))
 bool hw_spinlock_manager_is_core_initialized(void);
 
 /**
@@ -201,6 +212,7 @@ bool hw_spinlock_manager_is_core_initialized(void);
  *
  * @return 0 if uninitialized, 1 if initialized.
  */
+__attribute__((section(".time_critical")))
 bool hw_spinlock_manager_is_fully_initialized(void);
 
 /**
@@ -233,6 +245,7 @@ bool hw_spinlock_manager_register_with_scheduler(void);
  * @param spinlock_num Number of spinlock to release.
  * @param save_val Value that was returned from the acquisition operation.
  */
+__attribute__((section(".time_critical")))
 void hw_spinlock_release(uint32_t spinlock_num, uint32_t save_val);
 
 /**
@@ -241,6 +254,7 @@ void hw_spinlock_release(uint32_t spinlock_num, uint32_t save_val);
  * @param task_id Task ID to release spinlocks off.
  * @return uint32_t.
  */
+__attribute__((section(".time_critical")))
 uint32_t hw_spinlock_release_by_task(uint32_t task_id);
 
 /** @} */ // end of spinlock_man_api group

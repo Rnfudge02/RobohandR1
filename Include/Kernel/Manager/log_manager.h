@@ -11,20 +11,6 @@
 #include "pico/stdlib.h"
 
 /**
- * @defgroup log_macros Logging macros for ease-of-use
- * @{
- */
-
-#define LOG_TRACE(module, format, ...) log_message(LOG_LEVEL_TRACE, module, format, ##__VA_ARGS__)
-#define LOG_DEBUG(module, format, ...) log_message(LOG_LEVEL_DEBUG, module, format, ##__VA_ARGS__)
-#define LOG_INFO(module, format, ...)  log_message(LOG_LEVEL_INFO, module, format, ##__VA_ARGS__)
-#define LOG_WARN(module, format, ...)  log_message(LOG_LEVEL_WARN, module, format, ##__VA_ARGS__)
-#define LOG_ERROR(module, format, ...) log_message(LOG_LEVEL_ERROR, module, format, ##__VA_ARGS__)
-#define LOG_FATAL(module, format, ...) log_message(LOG_LEVEL_FATAL, module, format, ##__VA_ARGS__)
-
-/** @} */ // end of log_macros group
-
-/**
  * @defgroup log_enum Logging Enumerations
  * @{
  */
@@ -89,6 +75,7 @@ typedef struct {
  /**
  * @brief Flush the logs forcefully
  */
+__attribute__((section(".time_critical")))
 void log_flush(void);
 
 /**
@@ -137,6 +124,7 @@ bool log_init_spinlocks(void);
  * @return true if initialized.
  * @return false if not initialized.
  */
+__attribute__((section(".time_critical")))
 bool log_is_initialized(void);
 
 /**
@@ -145,6 +133,7 @@ bool log_is_initialized(void);
  * @return true if initialized.
  * @return false if not initialized.
  */
+__attribute__((section(".time_critical")))
 bool log_is_fully_initialized(void);
 
 /**
@@ -155,11 +144,13 @@ bool log_is_fully_initialized(void);
  * @param format String consisting of format specifiers.
  * @param ... Variadic arguments
  */
+__attribute__((section(".time_critical")))
 void log_message(log_level_t level, const char* module, const char* format, ...);
 
 /**
  * @brief Process logging messages in buffer.
  */
+__attribute__((section(".time_critical")))
 void log_process(void);
 
 /**
@@ -167,6 +158,7 @@ void log_process(void);
  * 
  * @param params Optional arguments.
  */
+__attribute__((section(".time_critical")))
 void log_scheduler_task(void* params);
 
 /**
@@ -174,6 +166,7 @@ void log_scheduler_task(void* params);
  * 
  * @param destinations Set destination to store too.
  */
+__attribute__((section(".time_critical")))
 void log_set_destinations(uint8_t destinations);
 
 /**
@@ -182,6 +175,7 @@ void log_set_destinations(uint8_t destinations);
  * @param level Logging level to direct.
  * @param destination Log destination to store to.
  */
+__attribute__((section(".time_critical")))
 void log_set_level(log_level_t level, log_destination_t destination);
 
 /** @} */ // end of log_api group
