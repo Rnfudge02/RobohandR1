@@ -79,8 +79,6 @@ static void shell_print_prompt(void);
 /** @} */
 
 void shell_init(void) {
-    //Initialize stdio for USB
-    stdio_init_all();
     
     //Clear shell context
     memset(&shell_ctx, 0, sizeof(shell_ctx));

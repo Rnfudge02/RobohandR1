@@ -11,20 +11,6 @@
 #include "pico/stdlib.h"
 
 /**
- * @defgroup log_macros Logging macros for ease-of-use
- * @{
- */
-
-#define LOG_TRACE(module, format, ...) log_message(LOG_LEVEL_TRACE, module, format, ##__VA_ARGS__)
-#define LOG_DEBUG(module, format, ...) log_message(LOG_LEVEL_DEBUG, module, format, ##__VA_ARGS__)
-#define LOG_INFO(module, format, ...)  log_message(LOG_LEVEL_INFO, module, format, ##__VA_ARGS__)
-#define LOG_WARN(module, format, ...)  log_message(LOG_LEVEL_WARN, module, format, ##__VA_ARGS__)
-#define LOG_ERROR(module, format, ...) log_message(LOG_LEVEL_ERROR, module, format, ##__VA_ARGS__)
-#define LOG_FATAL(module, format, ...) log_message(LOG_LEVEL_FATAL, module, format, ##__VA_ARGS__)
-
-/** @} */ // end of log_macros group
-
-/**
  * @defgroup log_enum Logging Enumerations
  * @{
  */

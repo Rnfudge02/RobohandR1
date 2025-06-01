@@ -72,7 +72,7 @@ bool spi_sensor_adapter_start(spi_sensor_adapter_t adapter) {
         return false;
     }
     
-    LOG_INFO("SPI Sensor Adapter", "Starting SPI sensor of type %d", adapter->config.type);
+    log_message(LOG_LEVEL_INFO, "SPI Sensor Adapter", "Starting SPI sensor of type %d", adapter->config.type);
     
     // Mark as running
     adapter->is_running = true;
@@ -88,7 +88,7 @@ bool spi_sensor_adapter_stop(spi_sensor_adapter_t adapter) {
         return false;
     }
     
-    LOG_INFO("SPI Sensor Adapter", "Stopping SPI sensor of type %d", adapter->config.type);
+    log_message(LOG_LEVEL_INFO, "SPI Sensor Adapter", "Stopping SPI sensor of type %d", adapter->config.type);
     
     // Mark as not running
     adapter->is_running = false;
@@ -104,7 +104,7 @@ bool spi_sensor_adapter_set_power_mode(spi_sensor_adapter_t adapter, sensor_powe
     // Update configuration
     adapter->config.mode = mode;
     
-    LOG_DEBUG("SPI Sensor Adapter", "Setting power mode %d for sensor type %d", 
+    log_message(LOG_LEVEL_DEBUG, "SPI Sensor Adapter", "Setting power mode %d for sensor type %d", 
              mode, adapter->config.type);
     
     // Note: The actual power mode setting would be done in the task function
@@ -120,7 +120,7 @@ bool spi_sensor_adapter_set_rate(spi_sensor_adapter_t adapter, sensor_rate_t rat
     // Update configuration
     adapter->config.rate = rate;
     
-    LOG_DEBUG("SPI Sensor Adapter", "Setting data rate %d for sensor type %d", 
+    log_message(LOG_LEVEL_DEBUG, "SPI Sensor Adapter", "Setting data rate %d for sensor type %d", 
              rate, adapter->config.type);
     
     // Note: The actual rate setting would be done in the task function
@@ -163,11 +163,11 @@ void spi_sensor_adapter_task_execute(spi_sensor_adapter_t adapter) {
 
 bool spi_sensor_adapter_get_data(spi_sensor_adapter_t adapter, sensor_data_t* data) {
     if (adapter == NULL || data == NULL) {
-        LOG_ERROR("SPI Sensor Adapter", "get_data: Invalid parameters.");
+        log_message(LOG_LEVEL_ERROR, "SPI Sensor Adapter", "get_data: Invalid parameters.");
         return false;
     }
     
-    LOG_DEBUG("SPI Sensor Adapter", "Getting data from SPI adapter (type %d).", adapter->config.type);
+    log_message(LOG_LEVEL_DEBUG, "SPI Sensor Adapter", "Getting data from SPI adapter (type %d).", adapter->config.type);
     
     // Copy latest data to output structure
     *data = adapter->latest_data;

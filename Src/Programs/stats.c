@@ -5,6 +5,7 @@
 
 #include "stats.h"
 
+#include "kernel_init.h"
 #include "log_manager.h"
 #include "scheduler.h"
 #include "spinlock_manager.h"
@@ -56,6 +57,8 @@ static void analyze_optimizations(optimization_suggestion_t *suggestions, int ma
 static bool is_task_registered(uint32_t task_id);
 static int find_task_slot(uint32_t task_id);
 static int find_or_create_task_slot(uint32_t task_id);
+static int cmd_status(int argc, char *argv[]);
+static int cmd_version(int argc, char *argv[]);
 static void update_period_stats(task_timing_stats_t *timing, uint32_t actual_period);
 
 bool stats_init(void) {
@@ -691,7 +694,7 @@ uint32_t stats_benchmark_fpu(void) {
     
     // Prevent optimization from removing the calculation
     if (result != 1.0f) {
-        LOG_INFO("HW Info", "Unexpected result: %f", result);
+        log_message(LOG_LEVEL_INFO, "HW Info", "Unexpected result: %f", result);
     }
     
     return end_time - start_time;
@@ -721,6 +724,8 @@ void stats_get_stats(hwstats_stats_t* stats) {
 static const shell_command_t stats_commands[] = {
     {cmd_system_stats, "sys_stats", "Show system statistics"},
     {cmd_task_stats, "task_stats", "Show task timing statistics"},
+    {cmd_status, "status", "Display application status"},
+    {cmd_version, "version", "Show firmware version"},
     {cmd_hwstats, "hw_stats", "Hardware and Firmware Information."},
     {cmd_optimizations, "opt", "Show/manage optimizations"},
     {cmd_buffers, "buffers", "Show registered buffers"},
@@ -871,13 +876,13 @@ int cmd_stats_reset(int argc, char *argv[]) {
  * @brief Print command usage information
  */
 static void stats_print_usage(void) {
-    LOG_INFO("HW Stats", "Usage: hw_stats [command]");
-    LOG_INFO("HW Stats", "Commands:");
-    LOG_INFO("HW Stats", "  status       - Show basic cache and FPU status.");
-    LOG_INFO("HW Stats", "  detail       - Show detailed cache and processor information.");
-    LOG_INFO("HW Stats", "  benchmark    - Run FPU benchmark.");
-    LOG_INFO("HW Stats", "  monitor <n>  - Monitor cache and FPU status for n seconds.");
-    LOG_INFO("HW Stats", "If no command is given, 'status' is the default.");
+    log_message(LOG_LEVEL_INFO, "HW Stats", "Usage: hw_stats [command]");
+    log_message(LOG_LEVEL_INFO, "HW Stats", "Commands:");
+    log_message(LOG_LEVEL_INFO, "HW Stats", "  status       - Show basic cache and FPU status.");
+    log_message(LOG_LEVEL_INFO, "HW Stats", "  detail       - Show detailed cache and processor information.");
+    log_message(LOG_LEVEL_INFO, "HW Stats", "  benchmark    - Run FPU benchmark.");
+    log_message(LOG_LEVEL_INFO, "HW Stats", "  monitor <n>  - Monitor cache and FPU status for n seconds.");
+    log_message(LOG_LEVEL_INFO, "HW Stats", "If no command is given, 'status' is the default.");
 }
 
 /**
@@ -889,11 +894,11 @@ static int stats_status(void) {
     hwstats_stats_t stats;
     stats_get_stats(&stats);
     
-    LOG_INFO("HW Info", "RP2350 Cache/FPU Status:");
-    LOG_INFO("HW Info", "------------------------");
-    LOG_INFO("HW Info", "FPU: %s", stats.fpu_enabled ? "Enabled" : "Disabled");
-    LOG_INFO("HW Info", "Instruction Cache: %s", stats.icache_enabled ? "Enabled" : "Disabled");
-    LOG_INFO("HW Info", "Data Cache: %s", stats.dcache_enabled ? "Enabled" : "Disabled");
+    log_message(LOG_LEVEL_INFO, "HW Info", "RP2350 Cache/FPU Status:");
+    log_message(LOG_LEVEL_INFO, "HW Info", "------------------------");
+    log_message(LOG_LEVEL_INFO, "HW Info", "FPU: %s", stats.fpu_enabled ? "Enabled" : "Disabled");
+    log_message(LOG_LEVEL_INFO, "HW Info", "Instruction Cache: %s", stats.icache_enabled ? "Enabled" : "Disabled");
+    log_message(LOG_LEVEL_INFO, "HW Info", "Data Cache: %s", stats.dcache_enabled ? "Enabled" : "Disabled");
     
     return 0;
 }
@@ -907,44 +912,44 @@ static int stats_detail(void) {
     hwstats_stats_t stats;
     stats_get_stats(&stats);
     
-    LOG_INFO("HW Stats", "RP2350 Detailed Cache/FPU Information:");
-    LOG_INFO("HW Stats", "-------------------------------------");
-    LOG_INFO("HW Stats", "FPU: %s.", stats.fpu_enabled ? "Enabled" : "Disabled");
-    LOG_INFO("HW Stats", "Instruction Cache: %s.", stats.icache_enabled ? "Enabled" : "Disabled");
-    LOG_INFO("HW Stats", "Data Cache: %s.", stats.dcache_enabled ? "Enabled" : "Disabled");
-    LOG_INFO("HW Stats", "Cache Levels: %lu.", stats.cache_levels);
-    LOG_INFO("HW Stats", "Instruction Cache Line Size: %lu bytes.", stats.icache_line_size);
-    LOG_INFO("HW Stats", "Data Cache Line Size: %lu bytes.", stats.dcache_line_size);
+    log_message(LOG_LEVEL_INFO, "HW Stats", "RP2350 Detailed Cache/FPU Information:");
+    log_message(LOG_LEVEL_INFO, "HW Stats", "-------------------------------------");
+    log_message(LOG_LEVEL_INFO, "HW Stats", "FPU: %s.", stats.fpu_enabled ? "Enabled" : "Disabled");
+    log_message(LOG_LEVEL_INFO, "HW Stats", "Instruction Cache: %s.", stats.icache_enabled ? "Enabled" : "Disabled");
+    log_message(LOG_LEVEL_INFO, "HW Stats", "Data Cache: %s.", stats.dcache_enabled ? "Enabled" : "Disabled");
+    log_message(LOG_LEVEL_INFO, "HW Stats", "Cache Levels: %lu.", stats.cache_levels);
+    log_message(LOG_LEVEL_INFO, "HW Stats", "Instruction Cache Line Size: %lu bytes.", stats.icache_line_size);
+    log_message(LOG_LEVEL_INFO, "HW Stats", "Data Cache Line Size: %lu bytes.", stats.dcache_line_size);
     
     // Get processor details from compiler macros
-    LOG_INFO("HW Stats", "Processor Information:");
-    LOG_INFO("HW Stats", "---------------------");
-    LOG_INFO("HW Stats", "CPU: Cortex-M33.");
+    log_message(LOG_LEVEL_INFO, "HW Stats", "Processor Information:");
+    log_message(LOG_LEVEL_INFO, "HW Stats", "---------------------");
+    log_message(LOG_LEVEL_INFO, "HW Stats", "CPU: Cortex-M33.");
     
     // Print compiler optimization level
     #if defined(__OPTIMIZE_SIZE__)
-        LOG_INFO("HW Info", "Optimization: -Os (size)");
+        log_message(LOG_LEVEL_INFO, "HW Info", "Optimization: -Os (size)");
     #elif defined(__OPTIMIZE__)
         #if defined(__OPTIMIZE_LEVEL__) && __OPTIMIZE_LEVEL__ == 3
-            LOG_INFO("HW Info", "Optimization: -O3 (speed)");
+            log_message(LOG_LEVEL_INFO, "HW Info", "Optimization: -O3 (speed)");
         #elif defined(__OPTIMIZE_LEVEL__) && __OPTIMIZE_LEVEL__ == 2
-            LOG_INFO("HW Info", "Optimization: -O2");
+            log_message(LOG_LEVEL_INFO, "HW Info", "Optimization: -O2");
         #elif defined(__OPTIMIZE_LEVEL__) && __OPTIMIZE_LEVEL__ == 1
-            LOG_INFO("HW Info", "Optimization: -O1");
+            log_message(LOG_LEVEL_INFO, "HW Info", "Optimization: -O1");
         #else
-            LOG_INFO("HW Info", "Optimization: Enabled");
+            log_message(LOG_LEVEL_INFO, "HW Info", "Optimization: Enabled");
         #endif
     #else
-        LOG_INFO("HW Info", "Optimization: None");
+        log_message(LOG_LEVEL_INFO, "HW Info", "Optimization: None");
     #endif
     
     // Print FPU ABI
     #if defined(__ARM_FP) && defined(__ARM_PCS_VFP)
-        LOG_INFO("HW Info", "FPU ABI: hard.");
+        log_message(LOG_LEVEL_INFO, "HW Info", "FPU ABI: hard.");
     #elif defined(__ARM_FP)
-        LOG_INFO("HW Info", "FPU ABI: softfp");
+        log_message(LOG_LEVEL_INFO, "HW Info", "FPU ABI: softfp");
     #else
-        LOG_INFO("HW Info", "FPU ABI: soft");
+        log_message(LOG_LEVEL_INFO, "HW Info", "FPU ABI: soft");
     #endif
     
     return 0;
@@ -956,7 +961,7 @@ static int stats_detail(void) {
  * @return 0 on success
  */
 static int stats_benchmark(void) {
-    LOG_INFO("HW Stats", "Running FPU benchmark...");
+    log_message(LOG_LEVEL_INFO, "HW Stats", "Running FPU benchmark...");
     
     // Run the benchmark multiple times for better accuracy
     const int runs = 5;
@@ -966,14 +971,14 @@ static int stats_benchmark(void) {
     for (int i = 0; i < runs; i++) {
         times[i] = stats_benchmark_fpu();
         total += times[i];
-        LOG_DEBUG("HW Stats", "Run %d: %lu us.", i+1, times[i]);
+        log_message(LOG_LEVEL_DEBUG, "HW Stats", "Run %d: %lu us.", i+1, times[i]);
     }
     
-    LOG_INFO("HW Stats", "Average execution time: %lu us.", total / runs);
+    log_message(LOG_LEVEL_INFO, "HW Stats", "Average execution time: %lu us.", total / runs);
     
     // Check if FPU is enabled
     if (!stats_is_fpu_enabled()) {
-        LOG_WARN("HW Stats", "FPU is currently disabled! Performance may be significantly improved by enabling the FPU.");
+        log_message(LOG_LEVEL_WARN, "HW Stats", "FPU is currently disabled! Performance may be significantly improved by enabling the FPU.");
     }
     
     return 0;
@@ -987,15 +992,15 @@ static int stats_benchmark(void) {
  */
 static int stats_monitor(int seconds) {
     if (seconds <= 0 || seconds > 60) {
-        LOG_ERROR("HW Stats", "Invalid duration. Please specify between 1 and 60 seconds.");
+        log_message(LOG_LEVEL_ERROR, "HW Stats", "Invalid duration. Please specify between 1 and 60 seconds.");
         return -1;
     }
     
-    LOG_INFO("HW Stats", "Monitoring cache and FPU for %d seconds...", seconds);
-    LOG_INFO("HW Stats", "Press any key to stop.");
+    log_message(LOG_LEVEL_INFO, "HW Stats", "Monitoring cache and FPU for %d seconds...", seconds);
+    log_message(LOG_LEVEL_INFO, "HW Stats", "Press any key to stop.");
     
-    LOG_INFO("HW Stats", "Time(s)  FPU  I-Cache  D-Cache  Benchmark(us)");
-    LOG_INFO("HW Stats", "-------  ---  -------  -------  ------------");
+    log_message(LOG_LEVEL_INFO, "HW Stats", "Time(s)  FPU  I-Cache  D-Cache  Benchmark(us)");
+    log_message(LOG_LEVEL_INFO, "HW Stats", "-------  ---  -------  -------  ------------");
     
     // Clear any pending input
     while (getchar_timeout_us(0) != PICO_ERROR_TIMEOUT) {
@@ -1006,7 +1011,7 @@ static int stats_monitor(int seconds) {
         hwstats_stats_t stats;
         stats_get_stats(&stats);
         
-        LOG_DEBUG("Enabled", "SEC: %7d FPU: %3s ICACHE: %3s DCACHE: %3s BENCH_TIME: %12lu.", 
+        log_message(LOG_LEVEL_DEBUG, "Enabled", "SEC: %7d FPU: %3s ICACHE: %3s DCACHE: %3s BENCH_TIME: %12lu.", 
             i,
             stats.fpu_enabled ? "Yes" : "No",
             stats.icache_enabled ? "Yes" : "No",
@@ -1016,13 +1021,13 @@ static int stats_monitor(int seconds) {
         // Check for key press to exit early
         for (int j = 0; j < 10; j++) {  // Split into smaller intervals for better responsiveness
             if (getchar_timeout_us(100000) != PICO_ERROR_TIMEOUT) {  // 100ms
-                LOG_WARN("HW Stats", "Monitoring stopped by user.");
+                log_message(LOG_LEVEL_WARN, "HW Stats", "Monitoring stopped by user.");
                 return 0;
             }
         }
     }
     
-    LOG_INFO("HW Stats", "Monitoring complete.");
+    log_message(LOG_LEVEL_INFO, "HW Stats", "Monitoring complete.");
     return 0;
 }
 
@@ -1069,10 +1074,58 @@ int cmd_hwstats(int argc, char *argv[]) {
     }
 
     else {
-        LOG_INFO("HW Stats", "Unknown command: %s.", argv[1]);
+        log_message(LOG_LEVEL_INFO, "HW Stats", "Unknown command: %s.", argv[1]);
         stats_print_usage();
         return -1;
     }
+}
+
+/**
+ * @brief Command handler for 'status' command
+ * 
+ * Display current application status.
+ */
+static int cmd_status(int argc, char *argv[]) {
+    (void)argc;
+    (void)argv;
+    
+    log_message(LOG_LEVEL_INFO, "Stats", "Application Status");
+    log_message(LOG_LEVEL_INFO, "Stats", "------------------");
+    log_message(LOG_LEVEL_INFO, "Stats", "Uptime: %lu ms.", kernel_get_uptime_ms());
+    
+    // Get scheduler statistics
+    scheduler_stats_t sched_stats;
+    if (scheduler_get_stats(&sched_stats)) {
+        log_message(LOG_LEVEL_INFO, "Stats", "Tasks created: %lu.", sched_stats.task_creates);
+        log_message(LOG_LEVEL_INFO, "Stats", "Context switches: %lu.", sched_stats.context_switches);
+    }
+    
+    // Get system statistics
+    system_stats_t sys_stats;
+    if (stats_get_system(&sys_stats)) {
+        log_message(LOG_LEVEL_INFO, "Stats", "CPU usage: %u%%", sys_stats.cpu_usage_percent);
+        log_message(LOG_LEVEL_INFO, "Stats", "Core 0: %u%%", sys_stats.core0_usage_percent);
+        log_message(LOG_LEVEL_INFO, "Stats", "Core 1: %u%%", sys_stats.core1_usage_percent);
+        log_message(LOG_LEVEL_INFO, "Stats", "Temperature: %lu°C.", sys_stats.temperature_c);
+    }
+    
+    return 0;
+}
+
+/**
+ * @brief Command handler for 'version' command
+ * 
+ * Display firmware version information.
+ */
+static int cmd_version(int argc, char *argv[]) {
+    (void)argc;
+    (void)argv;
+    
+    log_message(LOG_LEVEL_INFO, "Firmware", "%s firmware v%s", APP_NAME, APP_VERSION);
+    log_message(LOG_LEVEL_INFO, "Firmware", "Build date: %s %s", __DATE__, __TIME__);
+    log_message(LOG_LEVEL_INFO, "Firmware", "SDK version: %s", PICO_SDK_VERSION_STRING);
+    
+    return 0;
 }
 
 void register_stats_commands(void) {

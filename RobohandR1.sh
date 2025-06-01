@@ -238,17 +238,25 @@ check_ninja() {
 generate_prompt_template() {
     local prompt_file="./Outputs/prompt_file.txt"
     local request=""
-    local include_core=0
-    local include_core_init=0
-    local include_core_manager=0
-    local include_core_scheduler=0
-    local include_core_shell=0
-    local include_core_stats=0
-    local include_components=0
+    local include_kernel=0
+    local include_kernel_manager=0
+    local include_kernel_scheduler=0
+    local include_kernel_shell=0
+
+    local include_programs=0
+
     local include_drivers=0
     local include_drivers_devices=0
     local include_drivers_i2c=0
     local include_drivers_spi=0
+
+    local include_tests=0
+    local include_test_framework=0
+    local include_test_scheduler=0
+    local include_test_mpu=0
+    local include_test_tz=0
+    local include_test_integration=0
+
     local include_cmake=0
     local include_readme=0
     local include_main=0
@@ -256,32 +264,24 @@ generate_prompt_template() {
     # Parse arguments after -a
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --core)
-                include_core=1
+            --kernel)
+                include_kernel=1
                 shift
                 ;;
-            --core-init)
-                include_core_init=1
+            --kernel-manager)
+                include_kernel_manager=1
                 shift
                 ;;
-            --core-manager)
-                include_core_manager=1
+            --kernel-scheduler)
+                include_kernel_scheduler=1
                 shift
                 ;;
-            --core-scheduler)
-                include_core_scheduler=1
+            --kernel-shell)
+                include_kernel_shell=1
                 shift
                 ;;
-            --core-shell)
-                include_core_shell=1
-                shift
-                ;;
-            --core-stats)
-                include_core_stats=1
-                shift
-                ;;
-            --components)
-                include_components=1
+            --programs)
+                include_programs=1
                 shift
                 ;;
             --drivers)
@@ -312,27 +312,59 @@ generate_prompt_template() {
                 include_main=1
                 shift
                 ;;
+            --tests)
+                include_tests=1
+                shift
+                ;;
+            --test-framework)
+                include_test_framework=1
+                shift
+                ;;
+            --test-scheduler)
+                include_test_scheduler=1
+                shift
+                ;;
+            --test-mpu)
+                include_test_mpu=1
+                shift
+                ;;
+            --test-tz)
+                include_test_tz=1
+                shift
+                ;;
+            --test-integration)
+                include_test_integration=1
+                shift
+                ;;
             --all)
-                include_core=1
-                include_components=1
+                include_kernel=1
+                include_programs=1
                 include_drivers=1
                 include_cmake=1
                 include_readme=1
                 include_main=1
+                include_tests=1
                 shift
                 ;;
             --all-core)
-                include_core_init=1
-                include_core_manager=1
-                include_core_scheduler=1
-                include_core_shell=1
-                include_core_stats=1
+                include_kernel_init=1
+                include_kernel_manager=1
+                include_kernel_scheduler=1
+                include_kernel_shell=1
                 shift
                 ;;
             --all-drivers)
                 include_drivers_devices=1
                 include_drivers_i2c=1
                 include_drivers_spi=1
+                shift
+                ;;
+            --all-tests)
+                include_test_framework=1
+                include_test_scheduler=1
+                include_test_mpu=1
+                include_test_tz=1
+                include_test_integration=1
                 shift
                 ;;
             *)
@@ -344,12 +376,10 @@ generate_prompt_template() {
     done
 
     # If generic core is set, enable all core submodules
-    if [ $include_core -eq 1 ]; then
-        include_core_init=1
-        include_core_manager=1
-        include_core_scheduler=1
-        include_core_shell=1
-        include_core_stats=1
+    if [ $include_kernel -eq 1 ]; then
+        include_kernel_manager=1
+        include_kernel_scheduler=1
+        include_kernel_shell=1
     fi
 
     # If generic drivers is set, enable all driver submodules
@@ -357,6 +387,15 @@ generate_prompt_template() {
         include_drivers_devices=1
         include_drivers_i2c=1
         include_drivers_spi=1
+    fi
+
+    # If generic tests is set, enable all test submodules
+    if [ $include_tests -eq 1 ]; then
+        include_test_framework=1
+        include_test_scheduler=1
+        include_test_mpu=1
+        include_test_tz=1
+        include_test_integration=1
     fi
 
     log_message "INFO" "Generating prompt template file"
@@ -374,42 +413,34 @@ generate_prompt_template() {
     # Add requested component files list
     echo -e "=== PROJECT STRUCTURE ===\n" >> $prompt_file
 
-    # Core submodules file listing
-    if [ $include_core_init -eq 1 ] || [ $include_core_manager -eq 1 ] || [ $include_core_scheduler -eq 1 ] || [ $include_core_shell -eq 1 ] || [ $include_core_stats -eq 1 ]; then
-        echo -e "Core Files:\n" >> $prompt_file
+    # Kernel submodules file listing
+    if [ $include_kernel_manager -eq 1 ] || [ $include_kernel_scheduler -eq 1 ] || [ $include_kernel_shell -eq 1 ]; then
+        echo -e "Kernel Files:\n" >> $prompt_file
+        echo "./Src/Kernel/kernel_init.c" >> $prompt_file
+
         
-        if [ $include_core_init -eq 1 ]; then
-            log_message "INFO" "Listing Core/Init files"
-            find ./Src/Core/Init -type f | sort >> $prompt_file
+        if [ $include_kernel_manager -eq 1 ]; then
+            log_message "INFO" "Listing Kernel/Manager files"
+            find ./Src/Kernel/Manager -type f | sort >> $prompt_file
         fi
         
-        if [ $include_core_manager -eq 1 ]; then
-            log_message "INFO" "Listing Core/Manager files"
-            find ./Src/Core/Manager -type f | sort >> $prompt_file
+        if [ $include_kernel_scheduler -eq 1 ]; then
+            log_message "INFO" "Listing Kernel/Scheduler files"
+            find ./Src/Kernel/Scheduler -type f | sort >> $prompt_file
         fi
         
-        if [ $include_core_scheduler -eq 1 ]; then
-            log_message "INFO" "Listing Core/Scheduler files"
-            find ./Src/Core/Scheduler -type f | sort >> $prompt_file
-        fi
-        
-        if [ $include_core_shell -eq 1 ]; then
+        if [ $include_kernel_shell -eq 1 ]; then
             log_message "INFO" "Listing Core/Shell files"
-            find ./Src/Core/Shell -type f | sort >> $prompt_file
-        fi
-        
-        if [ $include_core_stats -eq 1 ]; then
-            log_message "INFO" "Listing Core/Stats files"
-            find ./Src/Core/Stats -type f | sort >> $prompt_file
+            find ./Src/Kernel/Shell -type f | sort >> $prompt_file
         fi
         
         echo -e "\n" >> $prompt_file
     fi
     
-    if [ $include_components -eq 1 ]; then
-        log_message "INFO" "Listing Component files"
-        echo -e "Component Files:\n" >> $prompt_file
-        find ./Src/Components -type f | sort >> $prompt_file
+    if [ $include_programs -eq 1 ]; then
+        log_message "INFO" "Listing Program files"
+        echo -e "Program Files:\n" >> $prompt_file
+        find ./Src/Programs -type f | sort >> $prompt_file
         echo -e "\n" >> $prompt_file
     fi
     
@@ -442,13 +473,53 @@ generate_prompt_template() {
         echo -e "\n" >> $prompt_file
     fi
 
+    # Test framework file listing
+    if [ $include_test_framework -eq 1 ] || [ $include_test_scheduler -eq 1 ] || [ $include_test_mpu -eq 1 ] || [ $include_test_tz -eq 1 ] || [ $include_test_integration -eq 1 ]; then
+        echo -e "Test Framework Files:\n" >> $prompt_file
+        
+        if [ $include_test_framework -eq 1 ]; then
+            log_message "INFO" "Listing Test Framework core files"
+            echo "./Src/Tests/test_framework.c" >> $prompt_file
+            echo "./Src/Tests/test_framework.h" >> $prompt_file
+        fi
+        
+        if [ $include_test_scheduler -eq 1 ]; then
+            log_message "INFO" "Listing Scheduler test files"
+            echo "./Src/Tests/test_scheduler.c" >> $prompt_file
+            echo "./Src/Tests/test_scheduler.h" >> $prompt_file
+        fi
+        
+        if [ $include_test_mpu -eq 1 ]; then
+            log_message "INFO" "Listing MPU test files"
+            echo "./Src/Tests/test_mpu.c" >> $prompt_file
+            echo "./Src/Tests/test_mpu.h" >> $prompt_file
+        fi
+        
+        if [ $include_test_tz -eq 1 ]; then
+            log_message "INFO" "Listing TrustZone test files"
+            echo "./Src/Tests/test_tz.c" >> $prompt_file
+            echo "./Src/Tests/test_tz.h" >> $prompt_file
+        fi
+        
+        if [ $include_test_integration -eq 1 ]; then
+            log_message "INFO" "Listing Test Integration files"
+            echo "./Src/Tests/test_integration.c" >> $prompt_file
+            echo "./Src/Tests/test_integration.h" >> $prompt_file
+            echo "./Src/Tests/kernel_test_integration.h" >> $prompt_file
+        fi
+        
+        echo -e "\n" >> $prompt_file
+    fi
+
     # Add specific file content
     echo -e "\n=== CODE CONTENT ===\n" >> $prompt_file
     
-    # Core submodules content
-    if [ $include_core_init -eq 1 ]; then
-        log_message "INFO" "Adding Core/Init code content"
-        for FILE in $(find ./Src/Core/Init -type f | sort); do
+    cat ./Include/Kernel/kernel_init.h  >> $prompt_file
+    cat ./Src/Kernel/kernel_init.c >> $prompt_file
+    
+    if [ $include_kernel_manager -eq 1 ]; then
+        log_message "INFO" "Adding Kernel/Manager code content"
+        for FILE in $(find ./Src/Kernel/Manager -type f | sort); do
             if [ -f "$FILE" ]; then
                 echo -e "\n// File: $FILE" >> $prompt_file
                 cat $FILE >> $prompt_file
@@ -456,39 +527,9 @@ generate_prompt_template() {
         done
     fi
     
-    if [ $include_core_manager -eq 1 ]; then
-        log_message "INFO" "Adding Core/Manager code content"
-        for FILE in $(find ./Src/Core/Manager -type f | sort); do
-            if [ -f "$FILE" ]; then
-                echo -e "\n// File: $FILE" >> $prompt_file
-                cat $FILE >> $prompt_file
-            fi
-        done
-    fi
-    
-    if [ $include_core_scheduler -eq 1 ]; then
-        log_message "INFO" "Adding Core/Scheduler code content"
-        for FILE in $(find ./Src/Core/Scheduler -type f | sort); do
-            if [ -f "$FILE" ]; then
-                echo -e "\n// File: $FILE" >> $prompt_file
-                cat $FILE >> $prompt_file
-            fi
-        done
-    fi
-    
-    if [ $include_core_shell -eq 1 ]; then
-        log_message "INFO" "Adding Core/Shell code content"
-        for FILE in $(find ./Src/Core/Shell -type f | sort); do
-            if [ -f "$FILE" ]; then
-                echo -e "\n// File: $FILE" >> $prompt_file
-                cat $FILE >> $prompt_file
-            fi
-        done
-    fi
-    
-    if [ $include_core_stats -eq 1 ]; then
-        log_message "INFO" "Adding Core/Stats code content"
-        for FILE in $(find ./Src/Core/Stats -type f | sort); do
+    if [ $include_kernel_scheduler -eq 1 ]; then
+        log_message "INFO" "Adding Kernel/Scheduler code content"
+        for FILE in $(find ./Src/Kernel/Scheduler -type f | sort); do
             if [ -f "$FILE" ]; then
                 echo -e "\n// File: $FILE" >> $prompt_file
                 cat $FILE >> $prompt_file
@@ -496,9 +537,9 @@ generate_prompt_template() {
         done
     fi
 
-    if [ $include_components -eq 1 ]; then
-        log_message "INFO" "Adding Components code content"
-        for FILE in $(find ./Src/Components -type f | sort); do
+    if [ $include_programs -eq 1 ]; then
+        log_message "INFO" "Adding Program code content"
+        for FILE in $(find ./Src/Programs -type f | sort); do
             if [ -f "$FILE" ]; then
                 echo -e "\n// File: $FILE" >> $prompt_file
                 cat $FILE >> $prompt_file
@@ -548,6 +589,71 @@ generate_prompt_template() {
         cat CMakeLists.txt >> $prompt_file
     fi
 
+        # Test framework code content
+    if [ $include_test_framework -eq 1 ]; then
+        log_message "INFO" "Adding Test Framework core code content"
+        if [ -f "./Src/Tests/test_framework.h" ]; then
+            echo -e "\n// File: ./Src/Tests/test_framework.h" >> $prompt_file
+            cat ./Src/Tests/test_framework.h >> $prompt_file
+        fi
+        if [ -f "./Src/Tests/test_framework.c" ]; then
+            echo -e "\n// File: ./Src/Tests/test_framework.c" >> $prompt_file
+            cat ./Src/Tests/test_framework.c >> $prompt_file
+        fi
+    fi
+    
+    if [ $include_test_scheduler -eq 1 ]; then
+        log_message "INFO" "Adding Scheduler test code content"
+        if [ -f "./Src/Tests/test_scheduler.h" ]; then
+            echo -e "\n// File: ./Src/Tests/test_scheduler.h" >> $prompt_file
+            cat ./Src/Tests/test_scheduler.h >> $prompt_file
+        fi
+        if [ -f "./Src/Tests/test_scheduler.c" ]; then
+            echo -e "\n// File: ./Src/Tests/test_scheduler.c" >> $prompt_file
+            cat ./Src/Tests/test_scheduler.c >> $prompt_file
+        fi
+    fi
+    
+    if [ $include_test_mpu -eq 1 ]; then
+        log_message "INFO" "Adding MPU test code content"
+        if [ -f "./Src/Tests/test_mpu.h" ]; then
+            echo -e "\n// File: ./Src/Tests/test_mpu.h" >> $prompt_file
+            cat ./Src/Tests/test_mpu.h >> $prompt_file
+        fi
+        if [ -f "./Src/Tests/test_mpu.c" ]; then
+            echo -e "\n// File: ./Src/Tests/test_mpu.c" >> $prompt_file
+            cat ./Src/Tests/test_mpu.c >> $prompt_file
+        fi
+    fi
+    
+    if [ $include_test_tz -eq 1 ]; then
+        log_message "INFO" "Adding TrustZone test code content"
+        if [ -f "./Src/Tests/test_tz.h" ]; then
+            echo -e "\n// File: ./Src/Tests/test_tz.h" >> $prompt_file
+            cat ./Src/Tests/test_tz.h >> $prompt_file
+        fi
+        if [ -f "./Src/Tests/test_tz.c" ]; then
+            echo -e "\n// File: ./Src/Tests/test_tz.c" >> $prompt_file
+            cat ./Src/Tests/test_tz.c >> $prompt_file
+        fi
+    fi
+    
+    if [ $include_test_integration -eq 1 ]; then
+        log_message "INFO" "Adding Test Integration code content"
+        if [ -f "./Src/Tests/test_integration.h" ]; then
+            echo -e "\n// File: ./Src/Tests/test_integration.h" >> $prompt_file
+            cat ./Src/Tests/test_integration.h >> $prompt_file
+        fi
+        if [ -f "./Src/Tests/test_integration.c" ]; then
+            echo -e "\n// File: ./Src/Tests/test_integration.c" >> $prompt_file
+            cat ./Src/Tests/test_integration.c >> $prompt_file
+        fi
+        if [ -f "./Src/Tests/kernel_test_integration.h" ]; then
+            echo -e "\n// File: ./Src/Tests/kernel_test_integration.h" >> $prompt_file
+            cat ./Src/Tests/kernel_test_integration.h >> $prompt_file
+        fi
+    fi
+
     # Add user request if provided
     if [ -n "$request" ]; then
         echo -e "\n=== USER REQUEST ===\n" >> $prompt_file
@@ -567,6 +673,23 @@ build_project() {
     # Check for necessary compilers and tools
     check_arm_compiler || return 1
     check_ninja || return 1
+
+    cd Dependencies
+
+    mkdir ./build
+    cd build
+
+    cmake   -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=TRUE -S.. -G Ninja
+
+    if ninja; then
+        log_message "SUCCESS" "Build completed successfully"
+    else
+        log_message "ERROR" "Build failed"
+        cd ..
+        return 1
+    fi
+
+    cd ../..
     
     # Create build directory if it doesn't exist
     mkdir -p $BUILD_DIR
@@ -997,6 +1120,127 @@ initialize_environment() {
     log_message "SUCCESS" "Robohand system initialized successfully"
 }
 
+# Function to push UF2 file to RP2350 device
+push_uf2() {
+    local force_mode="$1"
+    
+    log_message "INFO" "Looking for RP2350 device in bootloader mode"
+    
+    # Check if UF2 file exists
+    if [ ! -f "$UF2_FILE" ]; then
+        log_message "ERROR" "UF2 file not found: $UF2_FILE"
+        log_message "INFO" "Build the project first with './$SCRIPT_NAME -b'"
+        return 1
+    fi
+    
+    # Look for RP2350 in bootloader mode (ID 2e8a:000f)
+    local device_found=$(lsusb | grep "2e8a:000f")
+    
+    if [ -z "$device_found" ]; then
+        log_message "WARNING" "RP2350 not found in bootloader mode"
+        log_message "INFO" "To enter bootloader mode:"
+        log_message "INFO" "1. Hold BOOTSEL button while connecting USB, OR"
+        log_message "INFO" "2. Hold BOOTSEL button and press RESET, then release both"
+        log_message "INFO" "3. Device should appear as 'RP2350 Boot' in lsusb"
+        
+        if [ "$force_mode" != "wait" ]; then
+            return 1
+        fi
+        
+        log_message "INFO" "Waiting for device to enter bootloader mode..."
+        log_message "INFO" "Press Ctrl+C to cancel"
+        
+        # Wait for device to appear (check every 2 seconds)
+        while [ -z "$(lsusb | grep '2e8a:000f')" ]; do
+            sleep 2
+            printf "."
+        done
+        echo ""
+        log_message "SUCCESS" "RP2350 detected in bootloader mode"
+    else
+        log_message "SUCCESS" "Found RP2350 in bootloader mode: $device_found"
+    fi
+    
+    # Find the mount point for the RP2350
+    local mount_point=""
+    local retry_count=0
+    local max_retries=10
+    
+    # Sometimes it takes a moment for the device to mount
+    while [ -z "$mount_point" ] && [ $retry_count -lt $max_retries ]; do
+        # Look for RP2350 mount point
+        mount_point=$(mount | grep -i "rp2350\|rpi-rp2" | awk '{print $3}' | head -n1)
+        
+        if [ -z "$mount_point" ]; then
+            # Also check /media and /mnt for mounted devices
+            mount_point=$(find /media /mnt -maxdepth 2 -name "*RP2350*" -o -name "*RPI-RP2*" 2>/dev/null | head -n1)
+        fi
+        
+        if [ -z "$mount_point" ]; then
+            log_message "INFO" "Waiting for RP2350 to mount... (attempt $((retry_count + 1))/$max_retries)"
+            sleep 1
+            retry_count=$((retry_count + 1))
+        fi
+    done
+    
+    if [ -z "$mount_point" ]; then
+        log_message "ERROR" "Could not find RP2350 mount point"
+        log_message "INFO" "Manual steps:"
+        log_message "INFO" "1. The device should appear as a USB drive"
+        log_message "INFO" "2. Copy $UF2_FILE to the USB drive"
+        log_message "INFO" "3. The device will automatically reboot and run your code"
+        return 1
+    fi
+    
+    log_message "SUCCESS" "Found RP2350 mounted at: $mount_point"
+    
+    # Verify it's actually writable and looks like a RP2350
+    if [ ! -w "$mount_point" ]; then
+        log_message "ERROR" "Mount point $mount_point is not writable"
+        log_message "INFO" "You may need to run with sudo permissions"
+        return 1
+    fi
+    
+    # Check if it looks like a RP2350 bootloader (should have INFO_UF2.TXT)
+    if [ ! -f "$mount_point/INFO_UF2.TXT" ]; then
+        log_message "WARNING" "Mount point doesn't contain INFO_UF2.TXT - may not be RP2350"
+        log_message "INFO" "Contents of $mount_point:"
+        ls -la "$mount_point" 2>/dev/null || echo "Cannot list contents"
+        
+        read -p "Continue anyway? (y/N): " confirm
+        if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+            log_message "INFO" "Push cancelled by user"
+            return 1
+        fi
+    else
+        log_message "INFO" "Verified RP2350 bootloader (found INFO_UF2.TXT)"
+    fi
+    
+    # Copy the UF2 file
+    log_message "INFO" "Copying UF2 file to device..."
+    log_message "INFO" "Source: $UF2_FILE"
+    log_message "INFO" "Target: $mount_point/$(basename $UF2_FILE)"
+    
+    if cp "$UF2_FILE" "$mount_point/"; then
+        log_message "SUCCESS" "UF2 file copied successfully"
+        log_message "INFO" "File size: $(du -h "$UF2_FILE" | cut -f1)"
+        
+        # Sync to ensure write is complete
+        log_message "INFO" "Syncing filesystem..."
+        sync
+        
+        log_message "SUCCESS" "Programming complete!"
+        log_message "INFO" "Device should automatically reboot and run your code"
+        log_message "INFO" "You can now connect to serial with './$SCRIPT_NAME -s'"
+        
+        return 0
+    else
+        log_message "ERROR" "Failed to copy UF2 file"
+        log_message "INFO" "Check permissions and available space"
+        return 1
+    fi
+}
+
 # Function to start serial communication
 start_serial() {
     local device="$1"
@@ -1042,12 +1286,14 @@ display_help() {
     printf "${FG_GREEN}%-4s %-15s${RESET} %s\n" "-h" "Help" "Display this help message"
     printf "${FG_GREEN}%-4s %-15s${RESET} %s\n" "-i" "Init" "Initialize development environment (requires sudo)"
     printf "${FG_GREEN}%-4s %-15s${RESET} %s\n" "-m" "Memory" "Analyze memory usage (run after building)"
+    printf "${FG_GREEN}%-4s %-15s${RESET} %s\n" "-p" "Push" "Push UF2 to RP2350 device [optional: wait]"
     printf "${FG_GREEN}%-4s %-15s${RESET} %s\n" "-s" "Serial" "Start serial communication [optional: device path]"
     echo -e ""
     echo -e "${FG_CYAN}${BOLD}Examples:${RESET}"
     echo -e "  ./$SCRIPT_NAME -b verbose    # Build with verbose output"
     echo -e "  ./$SCRIPT_NAME -m            # Analyze memory usage"
     echo -e "  ./$SCRIPT_NAME -s /dev/ttyACM1  # Connect to specific serial port"
+    echo -e "  ./$SCRIPT_NAME -p wait       # Wait for device to enter bootloader mode"
 }
 
 # ======== MAIN SCRIPT ========
@@ -1108,6 +1354,18 @@ while [ $# -gt 0 ]; do
         -m)
             shift
             analyze_memory
+            ;;
+
+        # Push - send uf2 to the Pi Pico 2
+        -p)
+            shift
+            # Check if we have an argument and it doesn't start with -
+            if [ $# -gt 0 ] && [[ "$1" == "wait" ]]; then
+                push_uf2 "wait"
+                shift
+            else
+                push_uf2 ""
+            fi
             ;;
 
         # Serial - start serial communication

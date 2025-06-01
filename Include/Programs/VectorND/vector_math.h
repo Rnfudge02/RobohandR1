@@ -73,6 +73,7 @@ typedef struct {
  */
 typedef struct {
     UnitComponent* components;
+    uint8_t capacity;  // Maximum number of components
     uint8_t count;
 } Unit;
 
@@ -117,6 +118,7 @@ typedef enum {
  * @param error The error code
  * @return const char* Description of the error
  */
+__attribute__((section(".time_critical")))
 const char* vector_error_string(VectorError error);
 
 /**
@@ -126,6 +128,7 @@ const char* vector_error_string(VectorError error);
  * @param capacity Initial capacity for unit components
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError unit_init(Unit* unit, uint8_t capacity);
 
 /**
@@ -136,6 +139,7 @@ VectorError unit_init(Unit* unit, uint8_t capacity);
  * @param exponent Exponent of the unit component
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError unit_add_component(Unit* unit, UnitType type, int8_t exponent);
 
 /**
@@ -144,6 +148,7 @@ VectorError unit_add_component(Unit* unit, UnitType type, int8_t exponent);
  * @param unit Pointer to unit structure to free
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError unit_free(Unit* unit);
 
 /**
@@ -153,6 +158,7 @@ VectorError unit_free(Unit* unit);
  * @param unit2 Second unit
  * @return bool True if units are compatible, false otherwise
  */
+__attribute__((section(".time_critical")))
 bool unit_are_compatible(const Unit* unit1, const Unit* unit2);
 
 /**
@@ -163,6 +169,7 @@ bool unit_are_compatible(const Unit* unit1, const Unit* unit2);
  * @param unit2 Second unit
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError unit_multiply(Unit* result, const Unit* unit1, const Unit* unit2);
 
 /**
@@ -173,6 +180,7 @@ VectorError unit_multiply(Unit* result, const Unit* unit1, const Unit* unit2);
  * @param unit2 Second unit (denominator)
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError unit_divide(Unit* result, const Unit* unit1, const Unit* unit2);
 
 /**
@@ -183,6 +191,7 @@ VectorError unit_divide(Unit* result, const Unit* unit1, const Unit* unit2);
  * @param uniform_units Flag indicating if all components have the same unit
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError vector_init(Vector* vector, uint16_t dim, bool uniform_units);
 
 /**
@@ -194,6 +203,7 @@ VectorError vector_init(Vector* vector, uint16_t dim, bool uniform_units);
  * @param uniform_units Flag indicating if all elements have the same unit
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError matrix_init(Matrix* matrix, uint16_t rows, uint16_t cols, bool uniform_units);
 
 /**
@@ -204,6 +214,7 @@ VectorError matrix_init(Matrix* matrix, uint16_t rows, uint16_t cols, bool unifo
  * @param unit Unit to set
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError vector_set_unit(Vector* vector, uint16_t index, const Unit* unit);
 
 /**
@@ -213,6 +224,7 @@ VectorError vector_set_unit(Vector* vector, uint16_t index, const Unit* unit);
  * @param unit Unit to set
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError vector_set_uniform_unit(Vector* vector, const Unit* unit);
 
 /**
@@ -223,6 +235,7 @@ VectorError vector_set_uniform_unit(Vector* vector, const Unit* unit);
  * @param value Value to set
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError vector_set_value(Vector* vector, uint16_t index, float value);
 
 /**
@@ -233,6 +246,7 @@ VectorError vector_set_value(Vector* vector, uint16_t index, float value);
  * @param value Pointer to store the value
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError vector_get_value(const Vector* vector, uint16_t index, float* value);
 
 /**
@@ -241,6 +255,7 @@ VectorError vector_get_value(const Vector* vector, uint16_t index, float* value)
  * @param vector Pointer to vector structure to free
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError vector_free(Vector* vector);
 
 /**
@@ -249,6 +264,7 @@ VectorError vector_free(Vector* vector);
  * @param matrix Pointer to matrix structure to free
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError matrix_free(Matrix* matrix);
 
 /**
@@ -259,6 +275,7 @@ VectorError matrix_free(Matrix* matrix);
  * @param b Second vector
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError vector_add(Vector* result, const Vector* a, const Vector* b);
 
 /**
@@ -269,6 +286,7 @@ VectorError vector_add(Vector* result, const Vector* a, const Vector* b);
  * @param b Second vector
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError vector_subtract(Vector* result, const Vector* a, const Vector* b);
 
 /**
@@ -279,6 +297,7 @@ VectorError vector_subtract(Vector* result, const Vector* a, const Vector* b);
  * @param b Second vector
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError vector_dot_product(float* result, Unit* result_unit, const Vector* a, const Vector* b);
 
 /**
@@ -289,6 +308,7 @@ VectorError vector_dot_product(float* result, Unit* result_unit, const Vector* a
  * @param b Second vector
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError vector_cross_product(Vector* result, const Vector* a, const Vector* b);
 
 /**
@@ -299,6 +319,7 @@ VectorError vector_cross_product(Vector* result, const Vector* a, const Vector* 
  * @param result_unit Pointer to store the unit of the magnitude
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError vector_magnitude(const Vector* vector, float* result, Unit* result_unit);
 
 /**
@@ -308,6 +329,7 @@ VectorError vector_magnitude(const Vector* vector, float* result, Unit* result_u
  * @param vector Input vector
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError vector_normalize(Vector* result, const Vector* vector);
 
 /**
@@ -319,6 +341,7 @@ VectorError vector_normalize(Vector* result, const Vector* vector);
  * @param scalar_unit Unit of the scalar (can be NULL for unitless scalar)
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError vector_scale(Vector* result, const Vector* vector, float scalar, const Unit* scalar_unit);
 
 /**
@@ -329,6 +352,7 @@ VectorError vector_scale(Vector* result, const Vector* vector, float scalar, con
  * @param result_unit Pointer to store the unit of the determinant
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError matrix_determinant(const Matrix* matrix, float* result, Unit* result_unit);
 
 /**
@@ -338,6 +362,7 @@ VectorError matrix_determinant(const Matrix* matrix, float* result, Unit* result
  * @param vector Input vector
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError vector_to_matrix(Matrix* result, const Vector* vector);
 
 /**
@@ -348,6 +373,7 @@ VectorError vector_to_matrix(Matrix* result, const Vector* vector);
  * @param vector Input vector
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError matrix_vector_multiply(Vector* result, const Matrix* matrix, const Vector* vector);
 
 /**
@@ -358,6 +384,7 @@ VectorError matrix_vector_multiply(Vector* result, const Matrix* matrix, const V
  * @param b Second matrix
  * @return VectorError Error code
  */
+__attribute__((section(".time_critical")))
 VectorError matrix_multiply(Matrix* result, const Matrix* a, const Matrix* b);
 
 #endif /* VECTOR_MATH_H */

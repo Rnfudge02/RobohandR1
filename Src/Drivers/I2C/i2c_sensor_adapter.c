@@ -132,11 +132,11 @@ void i2c_sensor_adapter_task_execute(i2c_sensor_adapter_t adapter) {
 
 bool i2c_sensor_adapter_get_data(i2c_sensor_adapter_t adapter, sensor_data_t* data) {
     if (adapter == NULL || data == NULL) {
-        LOG_ERROR("Sensor Adapter", "get_data: Invalid parameters.");
+        log_message(LOG_LEVEL_ERROR, "Sensor Adapter", "get_data: Invalid parameters.");
         return false;
     }
     
-    LOG_DEBUG("Sensor Adapter", "Getting data from adapter (type %d).", adapter->config.type);
+    log_message(LOG_LEVEL_DEBUG, "Sensor Adapter", "Getting data from adapter (type %d).", adapter->config.type);
     
     // Copy latest data to output structure
     *data = adapter->latest_data;

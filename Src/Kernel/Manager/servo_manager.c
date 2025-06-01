@@ -640,7 +640,7 @@ bool servo_manager_init(void) {
     // Initialize spinlock
     g_servo_lock_num = hw_spinlock_allocate(SPINLOCK_CAT_SERVO, "servo_manager_init");
     if (g_servo_lock_num == UINT_MAX) {
-        LOG_ERROR("Servo Manager Init", "Failed to claim spinlock for servo manager.");
+        log_message(LOG_LEVEL_ERROR, "Servo Manager Init", "Failed to claim spinlock for servo manager.");
         return false;
     }
     
@@ -660,7 +660,7 @@ bool servo_manager_init(void) {
     
     g_servo_manager = servo_manager_create(&sm_config);
     if (g_servo_manager == NULL) {
-        LOG_ERROR("Servo Manager Init", "Failed to create servo manager.");
+        log_message(LOG_LEVEL_ERROR, "Servo Manager Init", "Failed to create servo manager.");
         hw_spinlock_release(g_servo_lock_num, save);
         return false;
     }
@@ -679,7 +679,7 @@ bool servo_manager_init(void) {
     );
     
     if (g_servo_task_id < 0) {
-        LOG_ERROR("Servo Manager Init", "Failed to create servo manager task.");
+        log_message(LOG_LEVEL_ERROR, "Servo Manager Init", "Failed to create servo manager task.");
         servo_manager_destroy(g_servo_manager);
         g_servo_manager = NULL;
         hw_spinlock_release(g_servo_lock_num, save);
@@ -688,7 +688,7 @@ bool servo_manager_init(void) {
     
     // Start the servo manager
     if (!servo_manager_start(g_servo_manager)) {
-        LOG_ERROR("Servo Manager Init", "Failed to start servo manager.");
+        log_message(LOG_LEVEL_ERROR, "Servo Manager Init", "Failed to start servo manager.");
         servo_manager_destroy(g_servo_manager);
         g_servo_manager = NULL;
         hw_spinlock_release(g_servo_lock_num, save);
@@ -696,7 +696,7 @@ bool servo_manager_init(void) {
     }
     
     // Log success message if logging is available
-    LOG_INFO("Servo Manager Init", "Servo manager initialized successfully.");
+    log_message(LOG_LEVEL_INFO, "Servo Manager Init", "Servo manager initialized successfully.");
     
     // Release lock
     hw_spinlock_release(g_servo_lock_num, save);
@@ -758,9 +758,9 @@ bool servo_manager_ensure_task(void) {
     bool success = (g_servo_task_id >= 0);
     
     if (success) {
-        LOG_INFO("Servo Manager Init", "Servo manager task created with ID: %d.", g_servo_task_id);
+        log_message(LOG_LEVEL_INFO, "Servo Manager Init", "Servo manager task created with ID: %d.", g_servo_task_id);
     } else {
-        LOG_ERROR("Servo Manager Init", "Failed to create servo manager task.");
+        log_message(LOG_LEVEL_ERROR, "Servo Manager Init", "Failed to create servo manager task.");
     }
     
     // Release lock

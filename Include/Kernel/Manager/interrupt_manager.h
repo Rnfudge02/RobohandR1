@@ -223,35 +223,12 @@ bool interrupt_trigger_test(uint32_t irq_num);
  */
 
 /**
- * @brief Interrupt command handler.
- * 
- * This function handles the 'interrupt' shell command which provides
- * configuration and monitoring of interrupts and coalescing.
- * 
- * Usage: interrupt <subcommand> [options]
- * 
- * Subcommands:
- *   list         - List all registered interrupts.
- *   stats        - Show interrupt statistics.
- *   enable <irq> - Enable an interrupt.
- *   disable <irq> - Disable an interrupt.
- *   coalesce <irq> <mode> <time_us> <count> - Configure coalescing.
- *   test <irq>   - Trigger a test interrupt.
- *   reset        - Reset interrupt statistics.
- * 
- * @param argc Argument count.
- * @param argv Array of argument strings.
- * @return 0 on success, non-zero on error.
- */
-int cmd_interrupt(int argc, char *argv[]);
-
-/**
  * @brief Register interrupt commands with the shell.
  * 
  * This function registers the interrupt-related commands with the shell
  * system. It should be called during system initialization.
  */
-void register_interrupt_commands(void);
+void register_interrupt_manager_commands(void);
 
 /** @} */ // end of int_cmd group
 

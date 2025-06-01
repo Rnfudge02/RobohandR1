@@ -232,18 +232,18 @@ bool sensor_manager_stop_all(sensor_manager_t manager) {
 // In sensor_manager.c - Modify sensor_manager_start_sensor
 bool sensor_manager_start_sensor(sensor_manager_t manager, sensor_type_t type) {
     if (manager == NULL) {
-        LOG_ERROR("Sensor Manager", "Sensor manager is NULL.");
+        log_message(LOG_LEVEL_ERROR, "Sensor Manager", "Sensor manager is NULL.");
         return false;
     }
     
     if (type == SENSOR_TYPE_UNKNOWN) {
-        LOG_ERROR("Sensor Manager", "Unknown sensor type.");
+        log_message(LOG_LEVEL_ERROR, "Sensor Manager", "Unknown sensor type.");
         return false;
     }
     
     // Acquire lock
     if (!sensor_manager_lock(manager)) {
-        LOG_ERROR("Sensor Manager", "Failed to acquire sensor manager lock.");
+        log_message(LOG_LEVEL_ERROR, "Sensor Manager", "Failed to acquire sensor manager lock.");
         return false;
     }
     
@@ -254,13 +254,13 @@ bool sensor_manager_start_sensor(sensor_manager_t manager, sensor_type_t type) {
         if (manager->sensors[i].adapter != NULL &&
             i2c_sensor_adapter_get_type(manager->sensors[i].adapter) == type) {
             // Found the sensor, start it
-            LOG_INFO("Sensor Manager", "Starting sensor of type %d.", type);
+            log_message(LOG_LEVEL_INFO, "Sensor Manager", "Starting sensor of type %d.", type);
             if (i2c_sensor_adapter_start(manager->sensors[i].adapter)) {
                 manager->sensors[i].is_active = true;
-                LOG_INFO("Sensor Manager", "Sensor started successfully.");
+                log_message(LOG_LEVEL_INFO, "Sensor Manager", "Sensor started successfully.");
                 result = true;
             } else {
-                LOG_ERROR("Sensor Manager", "Failed to start sensor adapter.");
+                log_message(LOG_LEVEL_ERROR, "Sensor Manager", "Failed to start sensor adapter.");
             }
             break;
         }
@@ -270,7 +270,7 @@ bool sensor_manager_start_sensor(sensor_manager_t manager, sensor_type_t type) {
     sensor_manager_unlock(manager);
     
     if (!result) {
-        LOG_ERROR("Sensor Manager", "Sensor of type %d not found or failed to start.", type);
+        log_message(LOG_LEVEL_ERROR, "Sensor Manager", "Sensor of type %d not found or failed to start.", type);
     }
     
     return result;
@@ -352,12 +352,12 @@ bool sensor_manager_register_callback(
 
 bool sensor_manager_get_data(sensor_manager_t manager, sensor_type_t type, sensor_data_t* data) {
     if (manager == NULL || type == SENSOR_TYPE_UNKNOWN || data == NULL) {
-        LOG_ERROR("Sensor Manager", "get_data failed: Invalid parameters.");
+        log_message(LOG_LEVEL_ERROR, "Sensor Manager", "get_data failed: Invalid parameters.");
         return false;
     }
 
     // Log the request
-    LOG_DEBUG("Sensor Manager", "Requested data for sensor type: %d", type);
+    log_message(LOG_LEVEL_DEBUG, "Sensor Manager", "Requested data for sensor type: %d", type);
     
     // Count how many sensors we have registered
     int sensor_count = 0;
@@ -365,12 +365,12 @@ bool sensor_manager_get_data(sensor_manager_t manager, sensor_type_t type, senso
         if (manager->sensors[i].adapter != NULL) {
             sensor_count++;
             sensor_type_t sensor_type = i2c_sensor_adapter_get_type(manager->sensors[i].adapter);
-            LOG_DEBUG("Sensor Manager", "Found sensor at index %d with type %d", i, sensor_type);
+            log_message(LOG_LEVEL_DEBUG, "Sensor Manager", "Found sensor at index %d with type %d", i, sensor_type);
         }
     }
     
     if (sensor_count == 0) {
-        LOG_WARN("Sensor Manager", "No sensors registered with manager.");
+        log_message(LOG_LEVEL_WARN, "Sensor Manager", "No sensors registered with manager.");
         return false;
     }
     
@@ -381,10 +381,10 @@ bool sensor_manager_get_data(sensor_manager_t manager, sensor_type_t type, senso
             
             if (sensor_type == type) {
                 // Found the sensor, get data
-                LOG_DEBUG("Sensor Manager", "Found matching sensor at index %d, getting data", i);
+                log_message(LOG_LEVEL_DEBUG, "Sensor Manager", "Found matching sensor at index %d, getting data", i);
                 bool result = i2c_sensor_adapter_get_data(manager->sensors[i].adapter, data);
                 if (!result) {
-                    LOG_ERROR("Sensor Manager", "Failed to get data from sensor adapter");
+                    log_message(LOG_LEVEL_ERROR, "Sensor Manager", "Failed to get data from sensor adapter");
                 }
                 return result;
             }
@@ -392,7 +392,7 @@ bool sensor_manager_get_data(sensor_manager_t manager, sensor_type_t type, senso
     }
     
     // Sensor not found
-    LOG_WARN("Sensor Manager", "No sensor of type %d found among %d registered sensors", type, sensor_count);
+    log_message(LOG_LEVEL_WARN, "Sensor Manager", "No sensor of type %d found among %d registered sensors", type, sensor_count);
     return false;
 }
 
@@ -642,7 +642,7 @@ bool sensor_manager_init(void) {
     // Initialize spinlock
     g_sensor_lock_num = hw_spinlock_allocate(SPINLOCK_CAT_SENSOR, "sensor_manager_init");
     if (g_sensor_lock_num == UINT_MAX) {
-        LOG_ERROR("Sensor Manager Init", "Failed to claim spinlock for sensor manager init.");
+        log_message(LOG_LEVEL_ERROR, "Sensor Manager Init", "Failed to claim spinlock for sensor manager init.");
         return false;
     }
     
@@ -668,7 +668,7 @@ bool sensor_manager_init(void) {
     
     g_i2c_driver = i2c_driver_init(&i2c_config);
     if (g_i2c_driver == NULL) {
-        LOG_ERROR("Sensor Manager Init", "Failed to initialize I2C driver.");
+        log_message(LOG_LEVEL_ERROR, "Sensor Manager Init", "Failed to initialize I2C driver.");
         hw_spinlock_release(g_sensor_lock_num, save);
         return false;
     }
@@ -681,7 +681,7 @@ bool sensor_manager_init(void) {
     
     g_global_sensor_manager = sensor_manager_create(&sm_config);
     if (g_global_sensor_manager == NULL) {
-        LOG_ERROR("Sensor Manager Init", "Failed to create sensor manager.");
+        log_message(LOG_LEVEL_ERROR, "Sensor Manager Init", "Failed to create sensor manager.");
         i2c_driver_deinit(g_i2c_driver);
         g_i2c_driver = NULL;
         hw_spinlock_release(g_sensor_lock_num, save);
@@ -692,7 +692,7 @@ bool sensor_manager_init(void) {
     bool sensor_setup_success = setup_default_sensors(g_global_sensor_manager);
     if (!sensor_setup_success) {
         // Non-fatal warning
-        LOG_WARN("Sensor Manager Init","Some sensors failed to initialize.");
+        log_message(LOG_LEVEL_WARN, "Sensor Manager Init","Some sensors failed to initialize.");
     }
     
     // Create scheduler task
@@ -709,7 +709,7 @@ bool sensor_manager_init(void) {
     );
     
     if (g_sensor_task_id < 0) {
-        LOG_ERROR("Sensor Manager Init", "Failed to create sensor manager task.");
+        log_message(LOG_LEVEL_ERROR, "Sensor Manager Init", "Failed to create sensor manager task.");
         sensor_manager_destroy(g_global_sensor_manager);
         g_global_sensor_manager = NULL;
         i2c_driver_deinit(g_i2c_driver);
@@ -721,7 +721,7 @@ bool sensor_manager_init(void) {
     // Release lock
     hw_spinlock_release(g_sensor_lock_num, save);
     
-    LOG_INFO("Sensor Manager Init","Sensor manager initialized successfully.");
+    log_message(LOG_LEVEL_INFO, "Sensor Manager Init","Sensor manager initialized successfully.");
     return true;
 }
 
@@ -739,7 +739,7 @@ static bool setup_default_sensors(sensor_manager_t manager) {
     bool any_success = false;
     
     // Set up BMM350 magnetometer
-    const i2c_sensor_adapter_t* mag_adapter = setup_bmm350_sensor(manager);     //TODO
+    const i2c_sensor_adapter_t mag_adapter = setup_bmm350_sensor(manager);     // NOSONAR
     if (mag_adapter != NULL) {
         any_success = true;
     }
@@ -757,13 +757,13 @@ static bool setup_default_sensors(sensor_manager_t manager) {
  */
 static i2c_sensor_adapter_t setup_bmm350_sensor(sensor_manager_t manager) {
     // Create BMM350 adapter
-    LOG_INFO("BMM350 Setup", "Initializing BMM350 adapter...");
+    log_message(LOG_LEVEL_INFO, "BMM350 Setup", "Initializing BMM350 adapter...");
     bmm350_task_tcb_t* bmm350_tcb = bmm350_adapter_init(g_i2c_driver);
     if (bmm350_tcb == NULL) {
-        LOG_ERROR("BMM350 Adapter", "Failed to initialize BMM350 adapter.");
+        log_message(LOG_LEVEL_ERROR, "BMM350 Adapter", "Failed to initialize BMM350 adapter.");
         return NULL;
     }
-    LOG_INFO("BMM350 Setup", "BMM350 adapter initialized successfully.");
+    log_message(LOG_LEVEL_INFO, "BMM350 Setup", "BMM350 adapter initialized successfully.");
     
     // Create sensor adapter
     i2c_sensor_config_t config = {
@@ -774,7 +774,7 @@ static i2c_sensor_adapter_t setup_bmm350_sensor(sensor_manager_t manager) {
         .device_addr = BMM350_I2C_ADSEL_SET_LOW  // Default address
     };
     
-    LOG_INFO("BMM350 Setup", "Creating sensor adapter with type MAGNETOMETER...");
+    log_message(LOG_LEVEL_INFO, "BMM350 Setup", "Creating sensor adapter with type MAGNETOMETER...");
     i2c_sensor_adapter_t adapter = i2c_sensor_adapter_create(
         g_i2c_driver,
         &config,
@@ -783,20 +783,20 @@ static i2c_sensor_adapter_t setup_bmm350_sensor(sensor_manager_t manager) {
     );
     
     if (adapter == NULL) {
-        LOG_ERROR("BMM350 Adapter", "Failed to create sensor adapter for BMM350.");
+        log_message(LOG_LEVEL_ERROR, "BMM350 Adapter", "Failed to create sensor adapter for BMM350.");
         bmm350_adapter_deinit(bmm350_tcb);
         return NULL;
     }
-    LOG_INFO("BMM350 Setup", "Sensor adapter created successfully.");
+    log_message(LOG_LEVEL_INFO, "BMM350 Setup", "Sensor adapter created successfully.");
     
     // Add to sensor manager
-    LOG_INFO("BMM350 Setup", "Adding sensor to manager...");
+    log_message(LOG_LEVEL_INFO, "BMM350 Setup", "Adding sensor to manager...");
     if (!sensor_manager_add_sensor(manager, adapter)) {
-        LOG_ERROR("BMM350 Adapter", "Failed to add BMM350 sensor to manager.");
+        log_message(LOG_LEVEL_ERROR, "BMM350 Adapter", "Failed to add BMM350 sensor to manager.");
         i2c_sensor_adapter_destroy(adapter);
         return NULL;
     }
-    LOG_INFO("BMM350 Setup", "BMM350 sensor added to manager successfully.");
+    log_message(LOG_LEVEL_INFO, "BMM350 Setup", "BMM350 sensor added to manager successfully.");
     
     return adapter;
 }

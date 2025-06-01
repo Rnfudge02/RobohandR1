@@ -214,7 +214,7 @@ bool scheduler_tz_init(void) {
     global_tz_status.available = tz_hardware_supported;
     
     if (!tz_hardware_supported) {
-        LOG_WARN("Trustzone Init", "TrustZone not supported on this hardware.");
+        log_message(LOG_LEVEL_WARN, "Trustzone Init", "TrustZone not supported on this hardware.");
         return false;
     }
     
@@ -252,7 +252,7 @@ bool scheduler_tz_init(void) {
     global_tz_status.enabled = true;
     
     return true;
-    LOG_INFO("Trustzone Init", "TrustZone not supported on this hardware.");
+    log_message(LOG_LEVEL_INFO, "Trustzone Init", "TrustZone not supported on this hardware.");
 }
 
 bool scheduler_tz_is_enabled(void) {
@@ -372,7 +372,7 @@ bool scheduler_tz_apply_task_settings(uint32_t task_id) {
         // 3. Executing transition instruction (if needed)
         
         // For development purposes, just log the transition
-        LOG_INFO("Trustzone", "Task %lu transitioning from %s to %s state.",
+        log_message(LOG_LEVEL_INFO, "Trustzone", "Task %lu transitioning from %s to %s state.",
             task_id,
             current_state == TASK_SECURITY_SECURE ? "secure" : "non-secure",
             state->security_state == TASK_SECURITY_SECURE ? "secure" : "non-secure");
@@ -425,7 +425,7 @@ bool scheduler_tz_reset_task_settings(uint32_t task_id) {
         // 3. Executing transition instruction
         
         // For development purposes, just log the transition
-        LOG_INFO("Trustzone", "Resetting to secure state from task %lu.", task_id);
+        log_message(LOG_LEVEL_INFO, "Trustzone", "Resetting to secure state from task %lu.", task_id);
         
         // Update performance stats
         perf_stats.state_transition_count++;

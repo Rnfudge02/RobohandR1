@@ -8,12 +8,17 @@
 #ifndef KERNEL_INIT_H
 #define KERNEL_INIT_H
 
+#include "kernel_test_integration.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define APP_VERSION "1.0.0"
+#define APP_NAME "RobohandR1"
 
 /**
  * @defgroup kernel_enum Kernel Enumerations
@@ -31,7 +36,9 @@ typedef enum {
     SYS_INIT_ERROR_SHELL,         // Shell initialization failed.
     SYS_INIT_ERROR_SENSOR_MANAGER, // Sensor manager initialization failed.
     SYS_INIT_ERROR_MPU_TZ,        // MPU/TrustZone initialization failed.
-    SYS_INIT_ERROR_HARDWARE       // Hardware initialization failed.
+    SYS_INIT_ERROR_HARDWARE,       // Hardware initialization failed.
+    SYS_INIT_ERROR_INTERRUPT_MGR,
+    SYS_INIT_ERROR_LED_DRIVER
 } kernel_result_t;
 
 /**
@@ -45,6 +52,8 @@ typedef enum {
     SYS_INIT_FLAG_SERVOS        = 0x08,  // Initialize servos.           (0b1 << 3)
     SYS_INIT_FLAG_MPU           = 0x10,  // Initialize MPU.              (0b1 << 4)
     SYS_INIT_FLAG_TZ            = 0x20,  // Initialize TZ.               (0b1 << 5)
+    SYS_INIT_FLAG_INTERRUPT_MGR = 0x40,
+    SYS_INIT_FLAG_LED_DRIVER    = 0x80,
     SYS_INIT_FLAG_DEFAULT       = 0x04 | 0x02 | 0x01  // Default.
 } kernel_flags_t;
 
@@ -61,6 +70,7 @@ typedef enum {
 typedef struct {
     uint32_t watchdog_timeout_ms;   // Watchdog timeout in milliseconds.
     kernel_flags_t flags;         // Initialization flags.
+    kernel_test_config_t test_config;
     const char* app_name;           // Application name.
     const char* app_version;        // Application version.
 } kernel_config_t;
@@ -117,7 +127,6 @@ void kernel_register_commands(void);
  */
 __attribute__((section(".time_critical")))
 void kernel_run(void);
-
 
 /**
  * @brief Handle kernel shutdown.

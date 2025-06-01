@@ -71,9 +71,6 @@
 // Maximum number of tasks with MPU configurations
 #define MAX_MPU_TASKS              32
 
-// Maximum number of MPU regions per task
-#define MAX_MPU_REGIONS_PER_TASK   8
-
 // Spinlock for thread-safe access to MPU configuration
 static uint32_t mpu_spinlock_num;
 
@@ -105,6 +102,7 @@ static uint32_t last_task_id_applied[2] = {0, 0};
 
 // Forward declarations
 static void handle_mpu_fault(uint32_t task_id, void *fault_addr, uint32_t fault_type);
+int cmd_mpu_get_status(int task_id);
 
 /**
  * @brief Get task MPU state by task ID
@@ -351,7 +349,7 @@ bool scheduler_mpu_init(void) {
     
     if (num_regions == 0) {
         // No MPU available
-        LOG_WARN("MPU Init", "MPU not available on this hardware.");
+        log_message(LOG_LEVEL_WARN, "MPU Init", "MPU not available on this hardware.");
         return false;
     }
     
@@ -422,7 +420,7 @@ bool scheduler_mpu_init(void) {
     __dmb(); // Data Memory Barrier
     __isb(); // Instruction Synchronization Barrier
     
-    LOG_INFO("MPU Init", "MPU initialized with %u regions.", num_regions);
+    log_message(LOG_LEVEL_INFO, "MPU Init", "MPU initialized with %u regions.", num_regions);
     return true;
 }
 
@@ -720,34 +718,35 @@ bool scheduler_mpu_create_default_config(uint32_t task_id,
     return true;
 }
 
-bool scheduler_mpu_get_task_config(uint32_t task_id, task_mpu_config_t *config) {
+bool scheduler_mpu_get_task_config_minimal(uint32_t task_id, task_mpu_config_t *config) {
     if (!config) {
         return false;
     }
     
     uint32_t owner_irq = hw_spinlock_acquire(mpu_spinlock_num, scheduler_get_current_task());
     
-    // Find task state
     const task_mpu_state_t* state = get_task_mpu_state(task_id);
-    
     if (!state || !state->configured) {
         hw_spinlock_release(mpu_spinlock_num, owner_irq);
         return false;
     }
-
     
+    // Validate region count to prevent overflow
+    if (state->region_count > MAX_MPU_REGIONS_PER_TASK) {
+        hw_spinlock_release(mpu_spinlock_num, owner_irq);
+        return false;
+    }
     
-    // Set task ID
+    // Set all fields explicitly (no need to clear first)
     config->task_id = task_id;
-    
-    // Copy region configurations
     config->region_count = state->region_count;
+    
+    // Copy regions safely
     for (int i = 0; i < state->region_count; i++) {
         memcpy(&config->regions[i], &state->regions[i], sizeof(mpu_region_config_t));
     }
     
     hw_spinlock_release(mpu_spinlock_num, owner_irq);
-    
     return true;
 }
 
@@ -895,7 +894,7 @@ bool scheduler_mpu_test_protection(uint32_t task_id) {
     // The actual fault generation would happen in the task's context
     // Here we just return success to indicate the test was set up
     
-    LOG_WARN("MPU", "MPU test protection triggered for task %lu.", (unsigned long)task_id);
+    log_message(LOG_LEVEL_WARN, "MPU", "MPU test protection triggered for task %lu.", task_id);
     return true;
 }
 
@@ -937,7 +936,7 @@ bool scheduler_mpu_set_global_enabled(bool enabled) {
     
     hw_spinlock_release(mpu_spinlock_num, owner_irq);
     
-    LOG_INFO("MPU", "MPU globally %s\n", enabled ? "enabled" : "disabled");
+    log_message(LOG_LEVEL_INFO, "MPU", "MPU globally %s\n", enabled ? "enabled" : "disabled");
     return true;
 }
 
@@ -1038,39 +1037,7 @@ static int cmd_mpu_disable(int task_id) {
  */
 static int cmd_mpu_status(int task_id) {
     if (task_id > 0) {
-        // Show status for a specific task
-        bool is_protected;
-        if (scheduler_mpu_get_protection_status(task_id, &is_protected)) {
-            printf("MPU status for task %d: %s\n", task_id, 
-                   is_protected ? "Protected" : "Not protected");
-            
-            // Get task info for more details
-            task_control_block_t tcb;
-
-            char core_n;
-            if (tcb.core_affinity == 0) {
-                core_n = '0';
-            } else if (tcb.core_affinity == 1) {
-                core_n = '1';
-            } else {
-                core_n = ' ';
-            }
-            if (scheduler_get_task_info(task_id, &tcb)) {
-                printf("Task name: %s\n", tcb.name);
-                printf("Core affinity: %c\n", core_n);
-                printf("MPU enabled: %s\n", tcb.mpu_enabled ? "Yes" : "No");
-                printf("Fault count: %lu\n", tcb.fault_count);
-                
-                if (tcb.fault_count > 0) {
-                    printf("Last fault reason: %s\n", tcb.fault_reason);
-                }
-            }
-            
-            return 0;
-        } else {
-            printf("Failed to get MPU status for task %d\n", task_id);
-            return 1;
-        }
+        return cmd_mpu_get_status(task_id);
     } else {
         // Show status for all tasks
         printf("MPU Status for All Tasks:\n");
@@ -1104,6 +1071,44 @@ static int cmd_mpu_status(int task_id) {
     }
 }
 
+int cmd_mpu_get_status(int task_id) {
+    // Show status for a specific task
+    bool is_protected;
+    if (scheduler_mpu_get_protection_status(task_id, &is_protected)) {
+        printf("MPU status for task %d: %s\n", task_id, 
+        is_protected ? "Protected" : "Not protected");
+            
+        // Get task info for more details
+        task_control_block_t tcb;
+
+        if (scheduler_get_task_info(task_id, &tcb)) {
+
+            char core_n;
+            if (tcb.core_affinity == 0) {
+                core_n = '0';
+            } else if (tcb.core_affinity == 1) {
+                core_n = '1';
+            } else {
+                core_n = ' ';
+            }
+        
+            printf("Task name: %s\n", tcb.name);
+            printf("Core affinity: %c\n", core_n);
+            printf("MPU enabled: %s\n", tcb.mpu_enabled ? "Yes" : "No");
+            printf("Fault count: %lu\n", tcb.fault_count);
+                
+            if (tcb.fault_count > 0) {
+                printf("Last fault reason: %s\n", tcb.fault_reason);
+            }
+        }
+            
+        return 0;
+    } else {
+        printf("Failed to get MPU status for task %d\n", task_id);
+        return 1;
+    }
+}
+
 /**
  * @brief Implement the 'mpu region' command
  * 
@@ -1121,7 +1126,7 @@ static int cmd_mpu_region(int task_id, int region_num) {
     
     // Get the MPU configuration for the task
     task_mpu_config_t config;
-    if (!scheduler_mpu_get_task_config(task_id, &config)) {
+    if (!scheduler_mpu_get_task_config_minimal(task_id, &config)) {
         printf("Failed to get MPU configuration for task %d\n", task_id);
         return 1;
     }
@@ -1160,23 +1165,340 @@ static int cmd_mpu_region(int task_id, int region_num) {
 }
 
 /**
+ * @brief Parse and validate task ID from command line argument
+ * 
+ * @param[in] task_id_str String representation of task ID
+ * @param[out] task_id Pointer to store parsed task ID
+ * @return true if parsing successful, false otherwise
+ */
+static bool parse_task_id(const char *task_id_str, int *task_id) {
+    if (!task_id_str || !task_id) {
+        return false;
+    }
+    
+    *task_id = atoi(task_id_str);
+    if (*task_id <= 0) {
+        printf("Invalid task ID: %d\n", *task_id);
+        return false;
+    }
+    
+    return true;
+}
+
+/**
+ * @brief Parse memory address and size from option value
+ * 
+ * @param[in] value Option value in format "address,size"
+ * @param[out] addr Pointer to store parsed address
+ * @param[out] size Pointer to store parsed size
+ * @return true if parsing successful, false otherwise
+ */
+static bool parse_address_size(const char *value, uint32_t *addr, size_t *size) {
+    if (!value || !addr || !size) {
+        return false;
+    }
+    
+    const char *size_str = strchr(value, ',');
+    if (!size_str) {
+        return false;
+    }
+    
+    // Create a copy to avoid modifying the original string
+    char *value_copy = strdup(value);
+    if (!value_copy) {
+        return false;
+    }
+    
+    char *size_part = strchr(value_copy, ',');
+    *size_part = '\0';
+    size_part++;
+    
+    *addr = strtoul(value_copy, NULL, 0);
+    *size = atoi(size_part);
+    
+    free(value_copy);
+    return (*size > 0);
+}
+
+/**
+ * @brief Configure stack protection region
+ * 
+ * @param[in] value Stack size value
+ * @param[in] tcb Task control block containing stack information
+ * @param[in,out] regions Array of MPU regions
+ * @param[in,out] region_count Current region count
+ * @return true if region added successfully, false otherwise
+ */
+static bool configure_stack_region(const char *value, 
+                                   const task_control_block_t *tcb,
+                                   mpu_region_config_t *regions,
+                                   int *region_count) {
+    if (!value || !tcb || !regions || !region_count || *region_count >= 8) {
+        return false;
+    }
+    
+    size_t stack_size = atoi(value);
+    if (stack_size <= 0) {
+        return false;
+    }
+    
+    regions[*region_count].start_addr = tcb->stack_base;
+    regions[*region_count].size = stack_size;
+    regions[*region_count].access = MPU_READ_WRITE;
+    regions[*region_count].security = TZ_SECURE;
+    regions[*region_count].cacheable = true;
+    regions[*region_count].bufferable = true;
+    regions[*region_count].shareable = false;
+    
+    (*region_count)++;
+    printf("Added stack protection region: size=%zu\n", stack_size);
+    return true;
+}
+
+/**
+ * @brief Configure read-only memory region
+ * 
+ * @param[in] value Address and size in format "addr,size"
+ * @param[in,out] regions Array of MPU regions
+ * @param[in,out] region_count Current region count
+ * @return true if region added successfully, false otherwise
+ */
+static bool configure_readonly_region(const char *value,
+                                      mpu_region_config_t *regions,
+                                      int *region_count) {
+    if (!value || !regions || !region_count || *region_count >= 8) {
+        return false;
+    }
+    
+    uint32_t addr;
+    size_t size;
+    
+    if (!parse_address_size(value, &addr, &size)) {
+        printf("Invalid format for ro option\n");
+        return false;
+    }
+    
+    regions[*region_count].start_addr = (void *)addr;
+    regions[*region_count].size = size;
+    regions[*region_count].access = MPU_READ_ONLY;
+    regions[*region_count].security = TZ_SECURE;
+    regions[*region_count].cacheable = true;
+    regions[*region_count].bufferable = false;
+    regions[*region_count].shareable = true;
+    
+    (*region_count)++;
+    printf("Added read-only region: addr=0x%08lx, size=%zu\n", addr, size);
+    return true;
+}
+
+/**
+ * @brief Configure read-write memory region
+ * 
+ * @param[in] value Address and size in format "addr,size"
+ * @param[in,out] regions Array of MPU regions
+ * @param[in,out] region_count Current region count
+ * @return true if region added successfully, false otherwise
+ */
+static bool configure_readwrite_region(const char *value,
+                                       mpu_region_config_t *regions,
+                                       int *region_count) {
+    if (!value || !regions || !region_count || *region_count >= 8) {
+        return false;
+    }
+    
+    uint32_t addr;
+    size_t size;
+    
+    if (!parse_address_size(value, &addr, &size)) {
+        printf("Invalid format for rw option\n");
+        return false;
+    }
+    
+    regions[*region_count].start_addr = (void *)addr;
+    regions[*region_count].size = size;
+    regions[*region_count].access = MPU_READ_WRITE;
+    regions[*region_count].security = TZ_SECURE;
+    regions[*region_count].cacheable = true;
+    regions[*region_count].bufferable = true;
+    regions[*region_count].shareable = true;
+    
+    (*region_count)++;
+    printf("Added read-write region: addr=0x%08lx, size=%zu\n", addr, size);
+    return true;
+}
+
+/**
+ * @brief Configure executable memory region
+ * 
+ * @param[in] value Address and size in format "addr,size"
+ * @param[in,out] regions Array of MPU regions
+ * @param[in,out] region_count Current region count
+ * @return true if region added successfully, false otherwise
+ */
+static bool configure_executable_region(const char *value,
+                                        mpu_region_config_t *regions,
+                                        int *region_count) {
+    if (!value || !regions || !region_count || *region_count >= 8) {
+        return false;
+    }
+    
+    uint32_t addr;
+    size_t size;
+    
+    if (!parse_address_size(value, &addr, &size)) {
+        printf("Invalid format for exec option\n");
+        return false;
+    }
+    
+    regions[*region_count].start_addr = (void *)addr;
+    regions[*region_count].size = size;
+    regions[*region_count].access = MPU_READ_EXEC;
+    regions[*region_count].security = TZ_SECURE;
+    regions[*region_count].cacheable = true;
+    regions[*region_count].bufferable = false;
+    regions[*region_count].shareable = true;
+    
+    (*region_count)++;
+    printf("Added executable region: addr=0x%08lx, size=%zu\n", addr, size);
+    return true;
+}
+
+/**
+ * @brief Parse a single configuration option
+ * 
+ * @param[in] option_str Option string in format "option=value"
+ * @param[in] tcb Task control block
+ * @param[in,out] regions Array of MPU regions
+ * @param[in,out] region_count Current region count
+ * @return true if option parsed successfully, false otherwise
+ */
+static bool parse_configuration_option(const char *option_str,
+                                       const task_control_block_t *tcb,
+                                       mpu_region_config_t *regions,
+                                       int *region_count) {
+    if (!option_str || !tcb || !regions || !region_count) {
+        return false;
+    }
+    
+    char *option_copy = strdup(option_str);
+    if (!option_copy) {
+        return false;
+    }
+    
+    char *value = strchr(option_copy, '=');
+    if (!value) {
+        printf("Invalid option format: %s\n", option_str);
+        free(option_copy);
+        return false;
+    }
+    
+    *value = '\0';
+    value++;
+    
+    bool success = false;
+    
+    if (strcmp(option_copy, "stack") == 0) {
+        success = configure_stack_region(value, tcb, regions, region_count);
+    } else if (strcmp(option_copy, "ro") == 0) {
+        success = configure_readonly_region(value, regions, region_count);
+    } else if (strcmp(option_copy, "rw") == 0) {
+        success = configure_readwrite_region(value, regions, region_count);
+    } else if (strcmp(option_copy, "exec") == 0) {
+        success = configure_executable_region(value, regions, region_count);
+    } else {
+        printf("Unknown option: %s\n", option_copy);
+    }
+    
+    free(option_copy);
+    return success;
+}
+
+/**
+ * @brief Apply MPU configuration to a task
+ * 
+ * @param[in] task_id Task ID to configure
+ * @param[in] regions Array of configured MPU regions
+ * @param[in] region_count Number of regions to configure
+ * @return true if configuration applied successfully, false otherwise
+ */
+static bool apply_mpu_configuration(int task_id,
+                                   const mpu_region_config_t *regions, int region_count) {
+    if (!regions || region_count <= 0) {
+        printf("No valid regions specified\n");
+        return false;
+    }
+
+    if (region_count > MAX_MPU_REGIONS_PER_TASK) {
+        printf("Too many regions specified (max %d)\n", MAX_MPU_REGIONS_PER_TASK);
+        return false;
+    }
+
+    task_mpu_config_t config;
+    config.task_id = task_id;
+    config.region_count = (uint8_t)(region_count & 0xFF);
+    
+    // Copy regions directly into the config array
+    for (int i = 0; i < region_count; i++) {
+        config.regions[i] = regions[i];
+    }
+
+    if (!scheduler_mpu_configure_task(&config)) {
+        printf("Failed to apply MPU configuration for task %d\n", task_id);
+        return false;
+    }
+
+    if (!scheduler_mpu_enable_protection(task_id, true)) {
+        printf("Failed to enable MPU protection for task %d\n", task_id);
+        return false;
+    }
+
+    printf("MPU configuration applied successfully for task %d\n", task_id);
+    return true;
+}
+
+/**
  * @brief Implement the 'mpu config' command
  * 
- * Configures custom MPU settings for a task.
+ * Configures custom MPU (Memory Protection Unit) settings for a specified task.
+ * This command allows setting up memory regions with different access permissions
+ * including stack protection, read-only, read-write, and executable regions.
  * 
- * @param argc Argument count
- * @param argv Argument array
+ * @param[in] argc Argument count (must be >= 3)
+ * @param[in] argv Argument array containing:
+ *                 - argv[0]: command name
+ *                 - argv[1]: "config" subcommand
+ *                 - argv[2]: task ID
+ *                 - argv[3+]: configuration options in format "option=value"
+ * 
+ * @details Supported configuration options:
+ *          - stack=<size>: Configure stack protection with specified size
+ *          - ro=<addr,size>: Add read-only region at address with size
+ *          - rw=<addr,size>: Add read-write region at address with size
+ *          - exec=<addr,size>: Add executable region at address with size
+ * 
  * @return 0 on success, 1 on failure
+ * 
+ * @note Maximum of 8 MPU regions can be configured per task
+ * @note Task must exist in the scheduler for configuration to succeed
+ * 
+ * @example
+ * mpu config 5 stack=4096 ro=0x08000000,8192 rw=0x20000000,1024
  */
 static int cmd_mpu_config(int argc, char *argv[]) {
+    // Validate minimum arguments
     if (argc < 3) {
         printf("Usage: mpu config <task_id> <options>\n");
+        printf("Options:\n");
+        printf("  stack=<size>      - Configure stack protection\n");
+        printf("  ro=<addr,size>    - Add read-only region\n");
+        printf("  rw=<addr,size>    - Add read-write region\n");
+        printf("  exec=<addr,size>  - Add executable region\n");
         return 1;
     }
     
-    int task_id = atoi(argv[2]);
-    if (task_id <= 0) {
-        printf("Invalid task ID: %d\n", task_id);
+    // Parse and validate task ID
+    int task_id;
+    if (!parse_task_id(argv[2], &task_id)) {
         return 1;
     }
     
@@ -1187,150 +1509,17 @@ static int cmd_mpu_config(int argc, char *argv[]) {
         return 1;
     }
     
-    // Create a default configuration as a starting point
+    // Initialize MPU regions array
     mpu_region_config_t regions[8];  // Support up to 8 regions
     int region_count = 0;
     
-    // Parse the configuration options
+    // Parse all configuration options
     for (int i = 3; i < argc; i++) {
-        char *option = argv[i];
-        char *value = strchr(option, '=');
-        
-        if (!value) {
-            printf("Invalid option format: %s\n", option);
-            continue;
-        }
-        
-        *value = '\0';  // Split at the '=' character
-        value++;
-        
-        if (strcmp(option, "stack") == 0) {
-            // Configure stack protection
-            size_t stack_size = atoi(value);
-            if (stack_size > 0 && region_count < 8) {
-                regions[region_count].start_addr = tcb.stack_base;
-                regions[region_count].size = stack_size;
-                regions[region_count].access = MPU_READ_WRITE;
-                regions[region_count].security = TZ_SECURE;
-                regions[region_count].cacheable = true;
-                regions[region_count].bufferable = true;
-                regions[region_count].shareable = false;
-                region_count++;
-                printf("Added stack protection region: size=%d\n", stack_size);
-            }
-        }
-        else if (strcmp(option, "ro") == 0) {
-            // Add read-only region
-            const char *addr_str = value;
-            char *size_str = strchr(value, ',');
-            
-            if (!size_str) {
-                printf("Invalid format for ro option\n");
-                continue;
-            }
-            
-            *size_str = '\0';
-            size_str++;
-            
-            uint32_t addr = strtoul(addr_str, NULL, 0);
-            size_t size = atoi(size_str);
-            
-            if (size > 0 && region_count < 8) {
-                regions[region_count].start_addr = (void *)addr;
-                regions[region_count].size = size;
-                regions[region_count].access = MPU_READ_ONLY;
-                regions[region_count].security = TZ_SECURE;
-                regions[region_count].cacheable = true;
-                regions[region_count].bufferable = false;
-                regions[region_count].shareable = true;
-                region_count++;
-                printf("Added read-only region: addr=0x%08lx, size=%d\n", addr, size);
-            }
-        }
-
-        else if (strcmp(option, "rw") == 0) {
-            // Add read-write region
-            const char *addr_str = value;
-            char *size_str = strchr(value, ',');
-            
-            if (!size_str) {
-                printf("Invalid format for rw option\n");
-                continue;
-            }
-            
-            *size_str = '\0';
-            size_str++;
-            
-            uint32_t addr = strtoul(addr_str, NULL, 0);
-            size_t size = atoi(size_str);
-            
-            if (size > 0 && region_count < 8) {
-                regions[region_count].start_addr = (void *)addr;
-                regions[region_count].size = size;
-                regions[region_count].access = MPU_READ_WRITE;
-                regions[region_count].security = TZ_SECURE;
-                regions[region_count].cacheable = true;
-                regions[region_count].bufferable = true;
-                regions[region_count].shareable = true;
-                region_count++;
-                printf("Added read-write region: addr=0x%08lx, size=%d\n", addr, size);
-            }
-        }
-        else if (strcmp(option, "exec") == 0) {
-            // Add executable region
-            const char *addr_str = value;
-            char *size_str = strchr(value, ',');
-            
-            if (!size_str) {
-                printf("Invalid format for exec option\n");
-                continue;
-            }
-            
-            *size_str = '\0';
-            size_str++;
-            
-            uint32_t addr = strtoul(addr_str, NULL, 0);
-            size_t size = atoi(size_str);
-            
-            if (size > 0 && region_count < 8) {
-                regions[region_count].start_addr = (void *)addr;
-                regions[region_count].size = size;
-                regions[region_count].access = MPU_READ_EXEC;
-                regions[region_count].security = TZ_SECURE;
-                regions[region_count].cacheable = true;
-                regions[region_count].bufferable = false;
-                regions[region_count].shareable = true;
-                region_count++;
-                printf("Added executable region: addr=0x%08lx, size=%d\n", addr, size);
-            }
-        }
-        else {
-            printf("Unknown option: %s\n", option);
-        }
-    }
-    
-    if (region_count == 0) {
-        printf("No valid regions specified\n");
-        return 1;
+        parse_configuration_option(argv[i], &tcb, regions, &region_count);
     }
     
     // Apply the configuration
-    task_mpu_config_t config;
-    config.task_id = task_id;
-    config.regions = regions;
-    config.region_count = (uint8_t) (region_count & 0xFF);
-    
-    if (scheduler_mpu_configure_task(&config)) {
-        printf("MPU configuration applied successfully for task %d\n", task_id);
-        
-        // Enable the MPU for the task
-        scheduler_mpu_enable_protection(task_id, true);
-        
-        return 0;
-    } else {
-        printf("Failed to apply MPU configuration for task %d\n", task_id);
-        return 1;
-    }
+    return apply_mpu_configuration(task_id, regions, region_count) ? 0 : 1;
 }
 
 /**

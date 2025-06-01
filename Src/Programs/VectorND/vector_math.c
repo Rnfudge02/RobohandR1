@@ -1,487 +1,806 @@
+#include "vector_math.h"
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
 
-
-VectorError vector_normalize(Vector* result, const Vector* vector) {
-    if (result == NULL || vector == NULL) {
+/**
+ * @brief Initialize a Unit structure with specified capacity
+ * @param unit Pointer to Unit structure to initialize (must not be NULL)
+ * @param capacity Maximum number of components this unit can hold (0 for dimensionless)
+ * @return VECTOR_SUCCESS on success, error code on failure
+ * 
+ * @note A capacity of 0 creates a dimensionless unit (no components)
+ * @note For units with components, consider using at least capacity 2-4
+ */
+VectorError unit_init(Unit* unit, uint8_t capacity) {
+    if (unit == NULL) {
         return VECTOR_NULL_POINTER;
     }
     
-    /* Compute magnitude */
-    float magnitude;
-    Unit mag_unit;
+    // Handle dimensionless units (capacity == 0) explicitly
+    if (capacity == 0) {
+        unit->components = NULL;
+        unit->capacity = 0;
+        unit->count = 0;
+        return VECTOR_SUCCESS;
+    }
     
-    VectorError err = vector_magnitude(vector, &magnitude, &mag_unit);
+    // Allocate memory for components
+    unit->components = (UnitComponent*)calloc(capacity, sizeof(UnitComponent));
+    if (unit->components == NULL) {
+        return VECTOR_MEMORY_ERROR;
+    }
+    
+    // Initialize all fields
+    unit->capacity = capacity;
+    unit->count = 0;
+    
+    return VECTOR_SUCCESS;
+}
+
+/**
+ * @brief Create a dimensionless unit (convenience function)
+ * @param unit Pointer to Unit structure to initialize
+ * @return VECTOR_SUCCESS on success, error code on failure
+ */
+VectorError unit_init_dimensionless(Unit* unit) {
+    return unit_init(unit, 0);
+}
+
+VectorError unit_add_component(Unit* unit, UnitType type, int8_t exponent) {
+    if (unit == NULL) {
+        return VECTOR_NULL_POINTER;
+    }
+
+    // Search for existing component
+    for (uint8_t i = 0; i < unit->count; i++) {
+        if (unit->components[i].type != type) {
+            continue;  // Skip non-matching types
+        }
+        
+        // Found matching component - update exponent
+        unit->components[i].exponent += exponent;
+        
+        // Early return if component still has non-zero exponent
+        if (unit->components[i].exponent != 0) {
+            return VECTOR_SUCCESS;
+        }
+        
+        // Component exponent is now zero - remove it by shifting
+        for (uint8_t j = i; j < unit->count - 1; j++) {
+            unit->components[j] = unit->components[j + 1];
+        }
+        unit->count--;
+        return VECTOR_SUCCESS;
+    }
+
+    // Component not found - add new one only if exponent is non-zero
+    if (exponent == 0) {
+        return VECTOR_SUCCESS;
+    }
+    
+    // Reallocate memory for new component
+    UnitComponent* new_components = (UnitComponent*)realloc(unit->components,
+                                                          (unit->count + 1) * sizeof(UnitComponent));
+    if (new_components == NULL) {
+        return VECTOR_MEMORY_ERROR;
+    }
+    
+    // Add the new component
+    unit->components = new_components;
+    unit->components[unit->count].type = type;
+    unit->components[unit->count].exponent = exponent;
+    unit->count++;
+    
+    return VECTOR_SUCCESS;
+}
+
+VectorError unit_free(Unit* unit) {
+    if (unit == NULL) {
+        return VECTOR_NULL_POINTER;
+    }
+    
+    if (unit->components != NULL) {
+        free(unit->components);
+        unit->components = NULL;
+    }
+    unit->count = 0;
+    
+    return VECTOR_SUCCESS;
+}
+
+bool unit_are_compatible(const Unit* unit1, const Unit* unit2) {
+    if (unit1 == NULL || unit2 == NULL) {
+        return false;
+    }
+    
+    /* Units are compatible if they have the same components with same exponents */
+    if (unit1->count != unit2->count) {
+        return false;
+    }
+    
+    /* Check each component */
+    for (uint8_t i = 0; i < unit1->count; i++) {
+        bool found = false;
+        for (uint8_t j = 0; j < unit2->count; j++) {
+            if (unit1->components[i].type == unit2->components[j].type &&
+                unit1->components[i].exponent == unit2->components[j].exponent) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+VectorError unit_multiply(Unit* result, const Unit* unit1, const Unit* unit2) {
+    if (result == NULL || unit1 == NULL || unit2 == NULL) {
+        return VECTOR_NULL_POINTER;
+    }
+    
+    /* Initialize result with capacity for all possible components */
+    VectorError err = unit_init(result, unit1->count + unit2->count);
     if (err != VECTOR_SUCCESS) {
         return err;
     }
     
-    /* Check for zero magnitude */
-    if (magnitude == 0.0f) {
-        unit_free(&mag_unit);
+    /* Add components from first unit */
+    for (uint8_t i = 0; i < unit1->count; i++) {
+        err = unit_add_component(result, unit1->components[i].type, 
+                               unit1->components[i].exponent);
+        if (err != VECTOR_SUCCESS) {
+            unit_free(result);
+            return err;
+        }
+    }
+    
+    /* Add components from second unit */
+    for (uint8_t i = 0; i < unit2->count; i++) {
+        err = unit_add_component(result, unit2->components[i].type, 
+                               unit2->components[i].exponent);
+        if (err != VECTOR_SUCCESS) {
+            unit_free(result);
+            return err;
+        }
+    }
+    
+    return VECTOR_SUCCESS;
+}
+
+VectorError unit_divide(Unit* result, const Unit* unit1, const Unit* unit2) {
+    if (result == NULL || unit1 == NULL || unit2 == NULL) {
+        return VECTOR_NULL_POINTER;
+    }
+    
+    /* Initialize result with capacity for all possible components */
+    VectorError err = unit_init(result, unit1->count + unit2->count);
+    if (err != VECTOR_SUCCESS) {
+        return err;
+    }
+    
+    /* Add components from first unit */
+    for (uint8_t i = 0; i < unit1->count; i++) {
+        err = unit_add_component(result, unit1->components[i].type, 
+                               unit1->components[i].exponent);
+        if (err != VECTOR_SUCCESS) {
+            unit_free(result);
+            return err;
+        }
+    }
+    
+    /* Subtract components from second unit (negative exponents) */
+    for (uint8_t i = 0; i < unit2->count; i++) {
+        err = unit_add_component(result, unit2->components[i].type, 
+                               -unit2->components[i].exponent);
+        if (err != VECTOR_SUCCESS) {
+            unit_free(result);
+            return err;
+        }
+    }
+    
+    return VECTOR_SUCCESS;
+}
+
+/* Vector accessor functions */
+VectorError vector_set_value(Vector* vector, uint16_t index, float value) {
+    if (vector == NULL) {
+        return VECTOR_NULL_POINTER;
+    }
+    
+    if (index >= vector->dim) {
+        return VECTOR_INVALID_DIMENSION;
+    }
+    
+    vector->data[index] = value;
+    return VECTOR_SUCCESS;
+}
+
+VectorError vector_get_value(const Vector* vector, uint16_t index, float* value) {
+    if (vector == NULL || value == NULL) {
+        return VECTOR_NULL_POINTER;
+    }
+    
+    if (index >= vector->dim) {
+        return VECTOR_INVALID_DIMENSION;
+    }
+    
+    *value = vector->data[index];
+    return VECTOR_SUCCESS;
+}
+
+VectorError vector_set_unit(Vector* vector, uint16_t index, const Unit* unit) {
+    if (vector == NULL || unit == NULL) {
+        return VECTOR_NULL_POINTER;
+    }
+    
+    if (vector->uniform_units) {
+        if (index != 0) {
+            return VECTOR_INCOMPATIBLE_OPERATION;
+        }
+        index = 0;  /* Set the single uniform unit */
+    } else if (index >= vector->dim) {
+        return VECTOR_INVALID_DIMENSION;
+    }
+    
+    /* Free existing unit */
+    unit_free(&vector->units[index]);
+    
+    /* Copy new unit */
+    VectorError err = unit_init(&vector->units[index], unit->count);
+    if (err != VECTOR_SUCCESS) {
+        return err;
+    }
+    
+    for (uint8_t i = 0; i < unit->count; i++) {
+        err = unit_add_component(&vector->units[index], 
+                               unit->components[i].type,
+                               unit->components[i].exponent);
+        if (err != VECTOR_SUCCESS) {
+            return err;
+        }
+    }
+    
+    return VECTOR_SUCCESS;
+}
+
+VectorError vector_set_uniform_unit(Vector* vector, const Unit* unit) {
+    if (vector == NULL || unit == NULL) {
+        return VECTOR_NULL_POINTER;
+    }
+    
+    if (!vector->uniform_units) {
         return VECTOR_INCOMPATIBLE_OPERATION;
     }
     
-    /* Initialize result vector if not already initialized */
-    if (result->dim != vector->dim) {
-        err = vector_free(result);
-        if (err != VECTOR_SUCCESS) {
-            unit_free(&mag_unit);
-            return err;
-        }
-        
-        err = vector_init(result, vector->dim, true);  /* Normalized vector has unitless components */
-        if (err != VECTOR_SUCCESS) {
-            unit_free(&mag_unit);
-            return err;
-        }
-    }
-    
-    /* Set uniform unitless unit for result */
-    Unit unitless;
-    err = unit_init(&unitless, 1);
-    if (err != VECTOR_SUCCESS) {
-        unit_free(&mag_unit);
-        return err;
-    }
-    
-    err = vector_set_uniform_unit(result, &unitless);
-    unit_free(&unitless);
-    if (err != VECTOR_SUCCESS) {
-        unit_free(&mag_unit);
-        return err;
-    }
-    
-    /* Scale each component by 1/magnitude */
-    float32_t scale = 1.0f / magnitude;
-    arm_scale_f32(vector->data, scale, result->data, vector->dim);
-    
-    unit_free(&mag_unit);
-    return VECTOR_SUCCESS;
+    return vector_set_unit(vector, 0, unit);
 }
 
-VectorError vector_scale(Vector* result, const Vector* vector, float scalar, const Unit* scalar_unit) {
-    if (result == NULL || vector == NULL) {
+VectorError vector_free(Vector* vector) {
+    if (vector == NULL) {
         return VECTOR_NULL_POINTER;
     }
     
-    /* Initialize result vector if not already initialized */
-    if (result->dim != vector->dim) {
-        VectorError err = vector_free(result);
-        if (err != VECTOR_SUCCESS) {
-            return err;
-        }
-        
-        err = vector_init(result, vector->dim, vector->uniform_units);
-        if (err != VECTOR_SUCCESS) {
-            return err;
-        }
+    if (vector->data != NULL) {
+        free(vector->data);
+        vector->data = NULL;
     }
     
-    /* Calculate result units */
-    if (scalar_unit != NULL) {
-        if (vector->uniform_units) {
-            /* Calculate new unit */
-            Unit new_unit;
-            VectorError err = unit_multiply(&new_unit, vector->units, scalar_unit);
-            if (err != VECTOR_SUCCESS) {
-                return err;
-            }
-            
-            /* Set unit for result */
-            err = vector_set_uniform_unit(result, &new_unit);
-            unit_free(&new_unit);
-            if (err != VECTOR_SUCCESS) {
-                return err;
-            }
-        } else {
-            /* Calculate new unit for each component */
-            for (uint16_t i = 0; i < vector->dim; i++) {
-                Unit new_unit;
-                VectorError err = unit_multiply(&new_unit, &vector->units[i], scalar_unit);
-                if (err != VECTOR_SUCCESS) {
-                    return err;
-                }
-                
-                /* Set unit for result component */
-                err = vector_set_unit(result, i, &new_unit);
-                unit_free(&new_unit);
-                if (err != VECTOR_SUCCESS) {
-                    return err;
-                }
-            }
+    if (vector->units != NULL) {
+        uint16_t unit_count = vector->uniform_units ? 1 : vector->dim;
+        for (uint16_t i = 0; i < unit_count; i++) {
+            unit_free(&vector->units[i]);
         }
-    } else {
-        /* No scalar unit, copy units from vector */
-        if (vector->uniform_units) {
-            VectorError err = vector_set_uniform_unit(result, vector->units);
-            if (err != VECTOR_SUCCESS) {
-                return err;
-            }
-        } else {
-            for (uint16_t i = 0; i < vector->dim; i++) {
-                VectorError err = vector_set_unit(result, i, &vector->units[i]);
-                if (err != VECTOR_SUCCESS) {
-                    return err;
-                }
-            }
-        }
+        free(vector->units);
+        vector->units = NULL;
     }
     
-    /* Perform scaling using ARM DSP */
-    arm_scale_f32(vector->data, scalar, result->data, vector->dim);
+    vector->dim = 0;
+    vector->uniform_units = false;
     
     return VECTOR_SUCCESS;
 }
 
-VectorError vector_to_matrix(Matrix* result, const Vector* vector) {
-    if (result == NULL || vector == NULL) {
+VectorError matrix_free(Matrix* matrix) {
+    if (matrix == NULL) {
         return VECTOR_NULL_POINTER;
     }
     
-    /* Initialize result matrix */
-    VectorError err = matrix_free(result);
-    if (err != VECTOR_SUCCESS) {
-        return err;
+    if (matrix->data != NULL) {
+        free(matrix->data);
+        matrix->data = NULL;
     }
     
-    err = matrix_init(result, vector->dim, 1, vector->uniform_units);
-    if (err != VECTOR_SUCCESS) {
-        return err;
+    if (matrix->units != NULL) {
+        uint32_t unit_count = matrix->uniform_units ? 1 : (matrix->rows * matrix->cols);
+        for (uint32_t i = 0; i < unit_count; i++) {
+            unit_free(&matrix->units[i]);
+        }
+        free(matrix->units);
+        matrix->units = NULL;
     }
     
-    /* Copy data */
-    memcpy(result->data, vector->data, vector->dim * sizeof(float));
-    
-    /* Copy units */
-    if (vector->uniform_units) {
-        /* Copy uniform unit */
-        Unit unit_copy;
-        err = unit_init(&unit_copy, vector->units->count);
-        if (err != VECTOR_SUCCESS) {
-            return err;
-        }
-        
-        for (uint8_t i = 0; i < vector->units->count; i++) {
-            err = unit_add_component(&unit_copy, vector->units->components[i].type, 
-                                   vector->units->components[i].exponent);
-            if (err != VECTOR_SUCCESS) {
-                unit_free(&unit_copy);
-                return err;
-            }
-        }
-        
-        /* Free existing unit */
-        unit_free(result->units);
-        
-        /* Copy unit */
-        *result->units = unit_copy;
-    } else {
-        /* Copy individual units */
-        for (uint16_t i = 0; i < vector->dim; i++) {
-            Unit unit_copy;
-            err = unit_init(&unit_copy, vector->units[i].count);
-            if (err != VECTOR_SUCCESS) {
-                return err;
-            }
-            
-            for (uint8_t j = 0; j < vector->units[i].count; j++) {
-                err = unit_add_component(&unit_copy, vector->units[i].components[j].type, 
-                                       vector->units[i].components[j].exponent);
-                if (err != VECTOR_SUCCESS) {
-                    unit_free(&unit_copy);
-                    return err;
-                }
-            }
-            
-            /* Free existing unit */
-            unit_free(&result->units[i]);
-            
-            /* Copy unit */
-            result->units[i] = unit_copy;
-        }
-    }
+    matrix->rows = 0;
+    matrix->cols = 0;
+    matrix->uniform_units = false;
     
     return VECTOR_SUCCESS;
 }
 
-VectorError matrix_vector_multiply(Vector* result, const Matrix* matrix, const Vector* vector) {
-    if (result == NULL || matrix == NULL || vector == NULL) {
+/* Error string function */
+const char* vector_error_string(VectorError error) {
+    switch (error) {
+        case VECTOR_SUCCESS: return "Success";
+        case VECTOR_NULL_POINTER: return "Null pointer";
+        case VECTOR_DIMENSION_MISMATCH: return "Dimension mismatch";
+        case VECTOR_UNIT_MISMATCH: return "Unit mismatch";
+        case VECTOR_INVALID_DIMENSION: return "Invalid dimension";
+        case VECTOR_MEMORY_ERROR: return "Memory error";
+        case VECTOR_INCOMPATIBLE_OPERATION: return "Incompatible operation";
+        case VECTOR_NOT_IMPLEMENTED: return "Not implemented";
+        default: return "Unknown error";
+    }
+}
+
+/* Optimized vector addition using ARM DSP */
+VectorError vector_add(Vector* result, const Vector* a, const Vector* b) {
+    if (result == NULL || a == NULL || b == NULL) {
         return VECTOR_NULL_POINTER;
     }
     
-    /* Check dimensions */
-    if (matrix->cols != vector->dim) {
+    if (a->dim != b->dim) {
         return VECTOR_DIMENSION_MISMATCH;
     }
     
-    /* Initialize result vector */
+    /* Check unit compatibility */
+    if (a->uniform_units && b->uniform_units) {
+        if (!unit_are_compatible(a->units, b->units)) {
+            return VECTOR_UNIT_MISMATCH;
+        }
+    } else if (a->uniform_units != b->uniform_units) {
+        return VECTOR_UNIT_MISMATCH;
+    }
+    
+    /* Initialize result if needed */
+    if (result->dim != a->dim) {
+        VectorError err = vector_free(result);
+        if (err != VECTOR_SUCCESS) return err;
+        
+        err = vector_init(result, a->dim, a->uniform_units);
+        if (err != VECTOR_SUCCESS) return err;
+    }
+    
+    /* Copy units to result */
+    if (a->uniform_units) {
+        VectorError err = vector_set_uniform_unit(result, a->units);
+        if (err != VECTOR_SUCCESS) return err;
+    } else {
+        for (uint16_t i = 0; i < a->dim; i++) {
+            if (!unit_are_compatible(&a->units[i], &b->units[i])) {
+                return VECTOR_UNIT_MISMATCH;
+            }
+            VectorError err = vector_set_unit(result, i, &a->units[i]);
+            if (err != VECTOR_SUCCESS) return err;
+        }
+    }
+    
+    /* Use ARM DSP for vector addition */
+    arm_add_f32(a->data, b->data, result->data, a->dim);
+    
+    return VECTOR_SUCCESS;
+}
+
+/* Optimized vector subtraction using ARM DSP */
+VectorError vector_subtract(Vector* result, const Vector* a, const Vector* b) {
+    if (result == NULL || a == NULL || b == NULL) {
+        return VECTOR_NULL_POINTER;
+    }
+    
+    if (a->dim != b->dim) {
+        return VECTOR_DIMENSION_MISMATCH;
+    }
+    
+    /* Check unit compatibility */
+    if (a->uniform_units && b->uniform_units) {
+        if (!unit_are_compatible(a->units, b->units)) {
+            return VECTOR_UNIT_MISMATCH;
+        }
+    } else if (a->uniform_units != b->uniform_units) {
+        return VECTOR_UNIT_MISMATCH;
+    }
+    
+    /* Initialize result if needed */
+    if (result->dim != a->dim) {
+        VectorError err = vector_free(result);
+        if (err != VECTOR_SUCCESS) return err;
+        
+        err = vector_init(result, a->dim, a->uniform_units);
+        if (err != VECTOR_SUCCESS) return err;
+    }
+    
+    /* Copy units to result */
+    if (a->uniform_units) {
+        VectorError err = vector_set_uniform_unit(result, a->units);
+        if (err != VECTOR_SUCCESS) return err;
+    } else {
+        for (uint16_t i = 0; i < a->dim; i++) {
+            if (!unit_are_compatible(&a->units[i], &b->units[i])) {
+                return VECTOR_UNIT_MISMATCH;
+            }
+            VectorError err = vector_set_unit(result, i, &a->units[i]);
+            if (err != VECTOR_SUCCESS) return err;
+        }
+    }
+    
+    /* Use ARM DSP for vector subtraction */
+    arm_sub_f32(a->data, b->data, result->data, a->dim);
+    
+    return VECTOR_SUCCESS;
+}
+
+/* Optimized dot product using ARM DSP */
+VectorError vector_dot_product(float* result, Unit* result_unit, const Vector* a, const Vector* b) {
+    if (result == NULL || result_unit == NULL || a == NULL || b == NULL) {
+        return VECTOR_NULL_POINTER;
+    }
+    
+    if (a->dim != b->dim) {
+        return VECTOR_DIMENSION_MISMATCH;
+    }
+    
+    /* Calculate result unit */
+    if (a->uniform_units && b->uniform_units) {
+        VectorError err = unit_multiply(result_unit, a->units, b->units);
+        if (err != VECTOR_SUCCESS) return err;
+    } else if (!a->uniform_units && !b->uniform_units) {
+        /* Check that all component products have the same unit */
+        Unit temp_unit;
+        Unit first_unit;
+        VectorError err = unit_multiply(&first_unit, &a->units[0], &b->units[0]);
+        if (err != VECTOR_SUCCESS) return err;
+        
+        for (uint16_t i = 1; i < a->dim; i++) {
+            err = unit_multiply(&temp_unit, &a->units[i], &b->units[i]);
+            if (err != VECTOR_SUCCESS) {
+                unit_free(&first_unit);
+                return err;
+            }
+            
+            if (!unit_are_compatible(&first_unit, &temp_unit)) {
+                unit_free(&first_unit);
+                unit_free(&temp_unit);
+                return VECTOR_UNIT_MISMATCH;
+            }
+            unit_free(&temp_unit);
+        }
+        
+        *result_unit = first_unit;
+    } else {
+        return VECTOR_UNIT_MISMATCH;
+    }
+    
+    /* Use ARM DSP for dot product */
+    arm_dot_prod_f32(a->data, b->data, a->dim, result);
+    
+    return VECTOR_SUCCESS;
+}
+
+/* Optimized magnitude calculation using ARM DSP */
+VectorError vector_magnitude(const Vector* vector, float* result, Unit* result_unit) {
+    if (vector == NULL || result == NULL || result_unit == NULL) {
+        return VECTOR_NULL_POINTER;
+    }
+    
+    /* Calculate result unit (same as vector components) */
+    if (vector->uniform_units) {
+        VectorError err = unit_init(result_unit, vector->units->count);
+        if (err != VECTOR_SUCCESS) return err;
+        
+        for (uint8_t i = 0; i < vector->units->count; i++) {
+            err = unit_add_component(result_unit, 
+                                   vector->units->components[i].type,
+                                   vector->units->components[i].exponent);
+            if (err != VECTOR_SUCCESS) {
+                unit_free(result_unit);
+                return err;
+            }
+        }
+    } else {
+        /* All components must have the same unit for magnitude */
+        for (uint16_t i = 1; i < vector->dim; i++) {
+            if (!unit_are_compatible(&vector->units[0], &vector->units[i])) {
+                return VECTOR_UNIT_MISMATCH;
+            }
+        }
+        
+        VectorError err = unit_init(result_unit, vector->units[0].count);
+        if (err != VECTOR_SUCCESS) return err;
+        
+        for (uint8_t i = 0; i < vector->units[0].count; i++) {
+            err = unit_add_component(result_unit, 
+                                   vector->units[0].components[i].type,
+                                   vector->units[0].components[i].exponent);
+            if (err != VECTOR_SUCCESS) {
+                unit_free(result_unit);
+                return err;
+            }
+        }
+    }
+    
+    /* Calculate magnitude using ARM DSP - more efficient than separate dot product and sqrt */
+    float sum_of_squares;
+    arm_dot_prod_f32(vector->data, vector->data, vector->dim, &sum_of_squares);
+    
+    /* Use ARM DSP square root if available, otherwise use standard sqrt */
+    #ifdef ARM_MATH_DSP
+        arm_sqrt_f32(sum_of_squares, result);
+    #else
+        *result = sqrtf(sum_of_squares);
+    #endif
+    
+    return VECTOR_SUCCESS;
+}
+
+/* Optimized cross product for 3D vectors */
+// Helper function to ensure result vector is properly initialized
+static VectorError ensure_result_vector_3d(Vector* result, bool uniform_units) {
+    if (result->dim == 3) {
+        return VECTOR_SUCCESS;  // Already correct size
+    }
+    
     VectorError err = vector_free(result);
     if (err != VECTOR_SUCCESS) {
         return err;
     }
     
-    err = vector_init(result, matrix->rows, matrix->uniform_units && vector->uniform_units);
+    return vector_init(result, 3, uniform_units);
+}
+
+// Helper function to handle uniform unit multiplication
+static VectorError handle_uniform_units(Vector* result, const Vector* a, const Vector* b) {
+    Unit result_unit;
+    VectorError err = unit_multiply(&result_unit, a->units, b->units);
     if (err != VECTOR_SUCCESS) {
         return err;
     }
     
-    /* Perform matrix-vector multiplication */
-    for (uint16_t i = 0; i < matrix->rows; i++) {
-        float sum = 0.0f;
-        
-        /* Compute dot product of row i with vector */
-        for (uint16_t j = 0; j < matrix->cols; j++) {
-            sum += matrix->data[i * matrix->cols + j] * vector->data[j];
-        }
-        
-        /* Set result */
-        result->data[i] = sum;
-        
-        /* Set units */
-        if (matrix->uniform_units && vector->uniform_units) {
-            /* Calculate result unit */
-            Unit result_unit;
-            err = unit_multiply(&result_unit, matrix->units, vector->units);
-            if (err != VECTOR_SUCCESS) {
-                return err;
-            }
-            
-            /* Set unit for all components */
-            err = vector_set_uniform_unit(result, &result_unit);
-            unit_free(&result_unit);
-            if (err != VECTOR_SUCCESS) {
-                return err;
-            }
-            
-            /* Only need to do this once for uniform units */
+    err = vector_set_uniform_unit(result, &result_unit);
+    unit_free(&result_unit);
+    return err;
+}
+
+// Helper function to validate unit compatibility for cross product
+static VectorError validate_non_uniform_units(const Vector* a, const Vector* b) {
+    // For cross product: result[i] units must be compatible across components
+    // This is a simplified check - could be expanded for more rigorous validation
+    Unit temp1;
+    Unit temp2;
+    VectorError err;
+    
+    err = unit_multiply(&temp1, &a->units[1], &b->units[2]);
+    if (err != VECTOR_SUCCESS) {
+        return err;
+    }
+    
+    err = unit_multiply(&temp2, &a->units[2], &b->units[1]);
+    if (err != VECTOR_SUCCESS) {
+        unit_free(&temp1);
+        return err;
+    }
+    
+    bool compatible = unit_are_compatible(&temp1, &temp2);
+    unit_free(&temp1);
+    unit_free(&temp2);
+    
+    return compatible ? VECTOR_SUCCESS : VECTOR_UNIT_MISMATCH;
+}
+
+// Helper function to set non-uniform units for cross product result
+static VectorError handle_non_uniform_units(Vector* result, const Vector* a, const Vector* b) {
+    VectorError err = validate_non_uniform_units(a, b);
+    if (err != VECTOR_SUCCESS) {
+        return err;
+    }
+    
+    // Calculate units for first component (others will be similar)
+    Unit component_unit;
+    err = unit_multiply(&component_unit, &a->units[1], &b->units[2]);
+    if (err != VECTOR_SUCCESS) {
+        return err;
+    }
+    
+    // Set units for all components (simplified - assumes all compatible)
+    for (int i = 0; i < 3; i++) {
+        err = vector_set_unit(result, (uint16_t) i, &component_unit);
+        if (err != VECTOR_SUCCESS) {
             break;
-        } else if (matrix->uniform_units) {
-            /* For each component of the result vector */
-            Unit result_unit;
-            
-            /* Calculate unit for this component */
-            err = unit_multiply(&result_unit, matrix->units, &vector->units[0]);
-            if (err != VECTOR_SUCCESS) {
-                return err;
-            }
-            
-            /* Set unit for this component */
-            err = vector_set_unit(result, i, &result_unit);
-            unit_free(&result_unit);
-            if (err != VECTOR_SUCCESS) {
-                return err;
-            }
-        } else if (vector->uniform_units) {
-            /* For each component of the result vector */
-            Unit result_unit;
-            
-            /* Calculate unit for this component */
-            err = unit_multiply(&result_unit, &matrix->units[i * matrix->cols], vector->units);
-            if (err != VECTOR_SUCCESS) {
-                return err;
-            }
-            
-            /* Set unit for this component */
-            err = vector_set_unit(result, i, &result_unit);
-            unit_free(&result_unit);
-            if (err != VECTOR_SUCCESS) {
-                return err;
-            }
-        } else {
-            /* Both non-uniform, calculate unit for each component */
-            Unit result_unit;
-            
-            /* Calculate unit for this component */
-            err = unit_multiply(&result_unit, &matrix->units[i * matrix->cols], &vector->units[0]);
-            if (err != VECTOR_SUCCESS) {
-                return err;
-            }
-            
-            /* Set unit for this component */
-            err = vector_set_unit(result, i, &result_unit);
-            unit_free(&result_unit);
-            if (err != VECTOR_SUCCESS) {
-                return err;
-            }
         }
     }
     
-    return VECTOR_SUCCESS;
+    unit_free(&component_unit);
+    return err;
 }
 
-VectorError matrix_multiply(Matrix* result, const Matrix* a, const Matrix* b) {
+// Helper function to handle all unit calculations
+static VectorError calculate_result_units(Vector* result, const Vector* a, const Vector* b) {
+    bool a_uniform = a->uniform_units;
+    bool b_uniform = b->uniform_units;
+    
+    if (a_uniform && b_uniform) {
+        return handle_uniform_units(result, a, b);
+    }
+    
+    if (!a_uniform && !b_uniform) {
+        return handle_non_uniform_units(result, a, b);
+    }
+    
+    // Mixed uniform/non-uniform case
+    return VECTOR_UNIT_MISMATCH;
+}
+
+// Helper function to perform the actual cross product calculation
+static void calculate_cross_product_values(Vector* result, const Vector* a, const Vector* b) {
+    // SIMD-friendly aligned arrays
+    float a_data[4] __attribute__((aligned(16)));
+    float b_data[4] __attribute__((aligned(16)));
+    float result_data[4] __attribute__((aligned(16)));
+    
+    // Copy data with padding
+    memcpy(a_data, a->data, 3 * sizeof(float));
+    memcpy(b_data, b->data, 3 * sizeof(float));
+    a_data[3] = 0.0f;
+    b_data[3] = 0.0f;
+    
+    // Cross product: result = a × b
+    result_data[0] = a_data[1] * b_data[2] - a_data[2] * b_data[1];
+    result_data[1] = a_data[2] * b_data[0] - a_data[0] * b_data[2];
+    result_data[2] = a_data[0] * b_data[1] - a_data[1] * b_data[0];
+    
+    // Copy result back
+    memcpy(result->data, result_data, 3 * sizeof(float));
+}
+
+// Main function - now much simpler and focused
+VectorError vector_cross_product(Vector* result, const Vector* a, const Vector* b) {
+    // Input validation
     if (result == NULL || a == NULL || b == NULL) {
         return VECTOR_NULL_POINTER;
     }
     
-    /* Check dimensions */
-    if (a->cols != b->rows) {
-        return VECTOR_DIMENSION_MISMATCH;
-    }
-    
-    /* Initialize result matrix */
-    VectorError err = matrix_free(result);
-    if (err != VECTOR_SUCCESS) {
-        return err;
-    }
-    
-    err = matrix_init(result, a->rows, b->cols, a->uniform_units && b->uniform_units);
-    if (err != VECTOR_SUCCESS) {
-        return err;
-    }
-    
-    /* Calculate unit for uniform case */
-    if (a->uniform_units && b->uniform_units) {
-        Unit result_unit;
-        err = unit_multiply(&result_unit, a->units, b->units);
-        if (err != VECTOR_SUCCESS) {
-            return err;
-        }
-        
-        /* Copy to result matrix */
-        unit_free(result->units);
-        *result->units = result_unit;
-    }
-    
-    /* Matrix multiplication using ARM DSP */
-    arm_matrix_instance_f32 a_inst, b_inst, result_inst;
-    
-    /* Initialize matrix instances */
-    arm_mat_init_f32(&a_inst, a->rows, a->cols, a->data);
-    arm_mat_init_f32(&b_inst, b->rows, b->cols, b->data);
-    arm_mat_init_f32(&result_inst, a->rows, b->cols, result->data);
-    
-    /* Perform multiplication */
-    arm_status status = arm_mat_mult_f32(&a_inst, &b_inst, &result_inst);
-    if (status != ARM_MATH_SUCCESS) {
+    // Cross product is only defined for 3D vectors
+    if (a->dim != 3 || b->dim != 3) {
         return VECTOR_INCOMPATIBLE_OPERATION;
     }
     
-    /* Set units for non-uniform case */
-    if (!(a->uniform_units && b->uniform_units)) {
-        /* For simplicity, we'll only handle the case where both matrices have uniform units */
-        /* A more complete implementation would handle all combinations */
-        if (a->uniform_units && !b->uniform_units) {
-            return VECTOR_NOT_IMPLEMENTED;
-        } else if (!a->uniform_units && b->uniform_units) {
-            return VECTOR_NOT_IMPLEMENTED;
-        } else {
-            return VECTOR_NOT_IMPLEMENTED;
+    // Ensure result vector is properly sized
+    VectorError err = ensure_result_vector_3d(result, a->uniform_units && b->uniform_units);
+    if (err != VECTOR_SUCCESS) {
+        return err;
+    }
+    
+    // Handle unit calculations
+    err = calculate_result_units(result, a, b);
+    if (err != VECTOR_SUCCESS) {
+        return err;
+    }
+    
+    // Perform the actual calculation
+    calculate_cross_product_values(result, a, b);
+    
+    return VECTOR_SUCCESS;
+}
+
+/* Vector initialization */
+VectorError vector_init(Vector* vector, uint16_t dim, bool uniform_units) {
+    if (vector == NULL) {
+        return VECTOR_NULL_POINTER;
+    }
+    
+    if (dim == 0) {
+        return VECTOR_INVALID_DIMENSION;
+    }
+    
+    /* Allocate aligned memory for SIMD operations */
+    vector->data = (float*)aligned_alloc(16, dim * sizeof(float));
+    if (vector->data == NULL) {
+        return VECTOR_MEMORY_ERROR;
+    }
+    
+    /* Initialize data to zero */
+    memset(vector->data, 0, dim * sizeof(float));
+    
+    vector->dim = dim;
+    vector->uniform_units = uniform_units;
+    
+    /* Allocate units */
+    if (uniform_units) {
+        vector->units = (Unit*)calloc(1, sizeof(Unit));
+    } else {
+        vector->units = (Unit*)calloc(dim, sizeof(Unit));
+    }
+    
+    if (vector->units == NULL) {
+        free(vector->data);
+        return VECTOR_MEMORY_ERROR;
+    }
+    
+    /* Initialize units */
+    uint16_t unit_count = uniform_units ? 1 : dim;
+    for (uint16_t i = 0; i < unit_count; i++) {
+        VectorError err = unit_init(&vector->units[i], 1);
+        if (err != VECTOR_SUCCESS) {
+            /* Clean up on error */
+            for (uint16_t j = 0; j < i; j++) {
+                unit_free(&vector->units[j]);
+            }
+            free(vector->units);
+            free(vector->data);
+            return err;
         }
     }
     
     return VECTOR_SUCCESS;
 }
 
-VectorError matrix_determinant(const Matrix* matrix, float* result, Unit* result_unit) {
-    if (matrix == NULL || result == NULL || result_unit == NULL) {
+/* Matrix initialization */
+VectorError matrix_init(Matrix* matrix, uint16_t rows, uint16_t cols, bool uniform_units) {
+    if (matrix == NULL) {
         return VECTOR_NULL_POINTER;
     }
     
-    /* Determinant is defined only for square matrices */
-    if (matrix->rows != matrix->cols) {
-        return VECTOR_INCOMPATIBLE_OPERATION;
+    if (rows == 0 || cols == 0) {
+        return VECTOR_INVALID_DIMENSION;
     }
     
-    /* Initialize result unit */
-    VectorError err;
+    /* Allocate aligned memory for SIMD operations */
+    uint32_t total_elements = rows * cols;
+    matrix->data = (float*)aligned_alloc(16, total_elements * sizeof(float));
+    if (matrix->data == NULL) {
+        return VECTOR_MEMORY_ERROR;
+    }
     
-    if (matrix->uniform_units) {
-        /* For uniform units, copy and multiply by dimension */
-        err = unit_init(result_unit, matrix->units->count);
-        if (err != VECTOR_SUCCESS) {
-            return err;
-        }
-        
-        for (uint8_t i = 0; i < matrix->units->count; i++) {
-            unit_add_component(result_unit, matrix->units->components[i].type, 
-                              matrix->units->components[i].exponent * matrix->rows);
-        }
+    /* Initialize data to zero */
+    memset(matrix->data, 0, total_elements * sizeof(float));
+    
+    matrix->rows = rows;
+    matrix->cols = cols;
+    matrix->uniform_units = uniform_units;
+    
+    /* Allocate units */
+    if (uniform_units) {
+        matrix->units = (Unit*)calloc(1, sizeof(Unit));
     } else {
-        /* For non-uniform units, we would need to check compatibility and compute the result unit */
-        /* For simplicity, let's assume all elements have the same unit */
-        err = unit_init(result_unit, matrix->units[0].count);
-        if (err != VECTOR_SUCCESS) {
-            return err;
-        }
-        
-        for (uint8_t i = 0; i < matrix->units[0].count; i++) {
-            unit_add_component(result_unit, matrix->units[0].components[i].type, 
-                              matrix->units[0].components[i].exponent * matrix->rows);
-        }
-        
-        /* Check that all elements have the same unit */
-        for (uint16_t i = 1; i < matrix->rows * matrix->cols; i++) {
-            if (!unit_are_compatible(&matrix->units[0], &matrix->units[i])) {
-                unit_free(result_unit);
-                return VECTOR_UNIT_MISMATCH;
-            }
-        }
+        matrix->units = (Unit*)calloc(total_elements, sizeof(Unit));
     }
     
-    /* Calculate determinant based on matrix size */
-    switch (matrix->rows) {
-        case 1:
-            *result = matrix->data[0];
-            break;
-            
-        case 2:
-            *result = matrix->data[0] * matrix->data[3] - matrix->data[1] * matrix->data[2];
-            break;
-            
-        case 3: {
-            /* For 3x3 matrix */
-            float a = matrix->data[0];
-            float b = matrix->data[1];
-            float c = matrix->data[2];
-            float d = matrix->data[3];
-            float e = matrix->data[4];
-            float f = matrix->data[5];
-            float g = matrix->data[6];
-            float h = matrix->data[7];
-            float i = matrix->data[8];
-            
-            *result = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
-            break;
-        }
-            
-        case 4: {
-            /* For 4x4 matrix - use cofactor expansion */
-            float det = 0.0f;
-            
-            /* Temporary 3x3 matrix for cofactors */
-            float temp[9];
-            
-            /* Calculate for each element in first row */
-            for (int i = 0; i < 4; i++) {
-                /* Create cofactor matrix */
-                int idx = 0;
-                for (int r = 1; r < 4; r++) {
-                    for (int c = 0; c < 4; c++) {
-                        if (c != i) {
-                            temp[idx++] = matrix->data[r * 4 + c];
-                        }
-                    }
-                }
-                
-                /* Calculate 3x3 determinant */
-                float cofactor = temp[0] * (temp[4] * temp[8] - temp[5] * temp[7]) -
-                                temp[1] * (temp[3] * temp[8] - temp[5] * temp[6]) +
-                                temp[2] * (temp[3] * temp[7] - temp[4] * temp[6]);
-                
-                /* Add to determinant with sign */
-                det += ((i & 1) ? -1.0f : 1.0f) * matrix->data[i] * cofactor;
+    if (matrix->units == NULL) {
+        free(matrix->data);
+        return VECTOR_MEMORY_ERROR;
+    }
+    
+    /* Initialize units */
+    uint32_t unit_count = uniform_units ? 1 : total_elements;
+    for (uint32_t i = 0; i < unit_count; i++) {
+        VectorError err = unit_init(&matrix->units[i], 1);
+        if (err != VECTOR_SUCCESS) {
+            /* Clean up on error */
+            for (uint32_t j = 0; j < i; j++) {
+                unit_free(&matrix->units[j]);
             }
-            
-            *result = det;
-            break;
+            free(matrix->units);
+            free(matrix->data);
+            return err;
         }
-            
-        default:
-            /* For larger matrices, we would need to implement a more general algorithm */
-            /* like LU decomposition, which is beyond the scope of this implementation */
-            unit_free(result_unit);
-            return VECTOR_NOT_IMPLEMENTED;
     }
     
     return VECTOR_SUCCESS;
+}
+
+/* Helper function for efficient memory copies using DSP */
+static inline void vector_memcpy_aligned(float* dst, const float* src, uint32_t count) {
+    /* Use ARM DSP copy if available for better performance */
+    arm_copy_f32(src, dst, count);
 }

@@ -1,6 +1,6 @@
 /**
-* @file scheduler_fixed.c
-* @brief Fixed scheduler with proper task scheduling
+* @file scheduler.c
+* @brief Scheduler with proper task scheduling
 */
 
 #include "log_manager.h"
@@ -44,6 +44,11 @@ struct repeating_timer scheduler_timer;
 //Forward declarations
 static bool scheduler_timer_callback(struct repeating_timer *t);
 static void run_task(task_control_block_t *task);
+static int cmd_deadline_info(int argc, char* argv[]);
+static int cmd_deadline_set(int argc, char* argv[]);
+
+int scheduler_get_next_deadline(task_control_block_t* task, task_control_block_t** next_task);
+void scheduler_get_next_multicore(uint8_t core, task_control_block_t** next_task);
 
 /**
  * @brief Test task function
@@ -54,7 +59,7 @@ void test_task(void *params) {
     static int iteration[10] = {0};  //Track iterations per task
     
     //Run for one iteration each time called
-    LOG_INFO("Test Task", "[Task %d] Running iteration %d on core %d.", 
+    log_message(LOG_LEVEL_INFO, "Test Task", "[Task %d] Running iteration %d on core %d.", 
         task_num, iteration[task_num]++, get_core_num());
     
     //Simulate work
@@ -62,7 +67,7 @@ void test_task(void *params) {
     
     //Tasks complete after 5 iterations
     if (iteration[task_num] >= 5) {
-        LOG_INFO("Test Task", "[Task %d] Completed!", task_num);
+        log_message(LOG_LEVEL_INFO, "Test Task", "[Task %d] Completed!", task_num);
         //Task will be marked as COMPLETED by the scheduler
     }
 }
@@ -86,31 +91,7 @@ task_control_block_t* scheduler_get_next_task(uint8_t core) {
             task->deadline.type == DEADLINE_HARD && task->deadline.period_ms > 0 && 
             task->deadline.deadline_ms > 0) {
             
-            uint64_t current_time = time_us_64();
-            uint64_t period_start = 0;
-                
-            if (task->deadline.last_start_time > 0) {
-                period_start = task->deadline.last_start_time - (task->deadline.last_start_time % 
-                    (task->deadline.period_ms * 1000));
-                period_start += task->deadline.period_ms * 1000;  // Next period
-            } else {
-                // First execution
-                period_start = current_time;
-            }
-                
-            uint64_t absolute_deadline = period_start + 
-                (task->deadline.deadline_ms * 1000);
-                
-            // If we're getting close to deadline (within 25% of deadline time),
-            // prioritize this task
-            uint64_t deadline_margin = task->deadline.deadline_ms * 250;  // 25% in us
-            
-            // This task is approaching its deadline
-            if ((absolute_deadline - current_time <= deadline_margin) && (next_task == NULL || 
-                task->priority > next_task->priority)) {
-                next_task = task;
-                highest_priority = task->priority;
-            }
+            highest_priority = scheduler_get_next_deadline(task, &next_task);
         }
     }
     
@@ -134,8 +115,8 @@ task_control_block_t* scheduler_get_next_task(uint8_t core) {
     
     // Second pass: round-robin within the highest priority level
     if (highest_priority >= 0) {
-        int start_index = (last_scheduled_index[core] + 1) % MAX_TASKS;
-        int i = start_index;
+        uint8_t start_index = (last_scheduled_index[core] + 1) % MAX_TASKS;
+        uint8_t i = start_index;
         
         do {
             task_control_block_t *task = &tasks[core][i];
@@ -156,20 +137,53 @@ task_control_block_t* scheduler_get_next_task(uint8_t core) {
     // If still no task found in this core's task list, check for any-core tasks 
     // from the other list
     if (!next_task) {
-        uint8_t other_core = (core == 0) ? 1 : 0;
+        scheduler_get_next_multicore(core, &next_task);
+    }
+    
+    return next_task;
+}
+
+int scheduler_get_next_deadline(task_control_block_t* task, task_control_block_t** next_task) {
+    int highest_priority = -1;
+    uint64_t current_time = time_us_64();
+    uint64_t period_start = 0;
+                
+    if (task->deadline.last_start_time > 0) {
+        period_start = task->deadline.last_start_time - (task->deadline.last_start_time % 
+            (task->deadline.period_ms * 1000));
+        period_start += task->deadline.period_ms * 1000;  // Next period
+    } else {
+        // First execution
+        period_start = current_time;
+    }
+                
+    uint64_t absolute_deadline = period_start + (task->deadline.deadline_ms * 1000);
+                
+    // If we're getting close to deadline (within 25% of deadline time),
+    // prioritize this task
+    uint64_t deadline_margin = task->deadline.deadline_ms * 250;  // 25% in us
+            
+    // This task is approaching its deadline
+    if ((absolute_deadline - current_time <= deadline_margin) && (*next_task == NULL || 
+        task->priority > (*next_task)->priority)) {
+        *next_task = task;
+        highest_priority = task->priority;
+    }
+
+    return highest_priority;
+}
+
+void scheduler_get_next_multicore(uint8_t core, task_control_block_t** next_task) {
+    uint8_t other_core = (core == 0) ? 1 : 0;
         
         for (int i = 0; i < MAX_TASKS; i++) {
             task_control_block_t *task = &tasks[other_core][i];
             
-            if (task->state == TASK_STATE_READY && task->core_affinity == 0xFF) {
-                if (next_task == NULL || task->priority > next_task->priority) {
-                    next_task = task;
-                }
+            if ((task->state == TASK_STATE_READY && task->core_affinity == 0xFF) &&
+                (*next_task == NULL || task->priority > (*next_task)->priority)) {
+                *next_task = task;
             }
         }
-    }
-    
-    return next_task;
 }
 
 /**
@@ -177,6 +191,32 @@ task_control_block_t* scheduler_get_next_task(uint8_t core) {
  * @note This function should be placed in RAM
  */
 __attribute__((section(".time_critical")))
+void run_handle_deadline(task_control_block_t* task, uint64_t end_time) {
+    uint64_t period_start = task->deadline.last_start_time - 
+        (task->deadline.last_start_time % (task->deadline.period_ms * 1000));
+
+    uint64_t absolute_deadline = period_start + (task->deadline.deadline_ms * 1000);
+                
+    if (end_time > absolute_deadline) {
+        // Deadline missed
+        task->deadline.deadline_misses++;
+                    
+        if (tracing_enabled) {
+            log_message(LOG_LEVEL_ERROR, "Scheduler","Task %s missed deadline.", task->name);
+        }
+                    
+            // Handle deadline miss based on type
+        if (task->deadline.type == DEADLINE_HARD && task->deadline.deadline_miss_handler) {
+            task->deadline.deadline_miss_handler(task->task_id);
+        }
+    }
+}
+
+/**
+ * @brief Run a task
+ * @note This function should be placed in RAM
+ */
+
 static void run_task(task_control_block_t *task) {
     if (task && task->function) {
         uint64_t start_time = time_us_64();
@@ -186,10 +226,6 @@ static void run_task(task_control_block_t *task) {
         // Record start time for deadline tracking
         if (task->deadline.type != DEADLINE_NONE) {
             task->deadline.last_start_time = start_time;
-        }
-        
-        if (tracing_enabled) {
-            LOG_DEBUG("Scheduler", "Running task %s on core %d.", task->name, get_core_num());
         }
         
         // Execute the task
@@ -207,43 +243,27 @@ static void run_task(task_control_block_t *task) {
         // Record completion time
         if (task->deadline.type != DEADLINE_NONE) {
             task->deadline.last_completion_time = end_time;
+
+            bool overrun = false;
             
             // Check for execution budget overrun
             if (task->deadline.execution_budget_us > 0 && 
                 execution_time > task->deadline.execution_budget_us) {
                 task->deadline_overrun = true;
                 
-                if (tracing_enabled) {
-                    LOG_WARN("Scheduler", "Task %s exceeded execution budget (%lu us).", 
-                           task->name, execution_time);
-                }
+                overrun = true;
+            }
+
+            if (overrun && tracing_enabled) {
+                log_message(LOG_LEVEL_WARN, "Scheduler", "Task %s exceeded execution budget (%lu us).", 
+                    task->name, execution_time);
+            }
+
+            if (task->deadline.period_ms > 0 && task->deadline.deadline_ms > 0) {
+                // Check for deadline miss
+                run_handle_deadline(task, end_time);
             }
             
-            // Check for deadline miss
-            if (task->deadline.period_ms > 0 && task->deadline.deadline_ms > 0) {
-                uint64_t period_start = task->deadline.last_start_time - 
-                                      (task->deadline.last_start_time % 
-                                      (task->deadline.period_ms * 1000));
-                uint64_t absolute_deadline = period_start + 
-                                          (task->deadline.deadline_ms * 1000);
-                
-                if (end_time > absolute_deadline) {
-                    // Deadline missed
-                    task->deadline.deadline_misses++;
-                    
-                    if (tracing_enabled) {
-                        LOG_ERROR("Scheduler","Task %s missed deadline.", task->name);
-                    }
-                    
-                    // Handle deadline miss based on type
-                    if (task->deadline.type == DEADLINE_HARD) {
-                        // For hard deadlines, call handler if available
-                        if (task->deadline.deadline_miss_handler) {
-                            task->deadline.deadline_miss_handler(task->task_id);
-                        }
-                    }
-                }
-            }
         }
         
         if (task->type == TASK_TYPE_ONESHOT) {
@@ -251,7 +271,7 @@ static void run_task(task_control_block_t *task) {
         }
         
         if (tracing_enabled) {
-            LOG_DEBUG("Scheduler", "Task %s completed in %lu us.", task->name, execution_time);
+            log_message(LOG_LEVEL_DEBUG, "Scheduler", "Task %s completed in %lu us.", task->name, execution_time);
         }
     }
 }
@@ -279,7 +299,7 @@ static bool scheduler_timer_callback(struct repeating_timer *t) {
     
     //Only show minimal debug output if tracing is enabled
     if (tracing_enabled && tick_count % 1000 == 0) {
-        LOG_DEBUG("Scheduler", "Active (tick %llu).", tick_count);
+        log_message(LOG_LEVEL_DEBUG, "Scheduler", "Active (tick %llu).", tick_count);
     }
     
     //Schedule tasks for both cores, schedules both cores in the same loop
@@ -290,7 +310,7 @@ static bool scheduler_timer_callback(struct repeating_timer *t) {
         }
         
         // Now find the highest priority ready task
-        task_control_block_t *next_task = scheduler_get_next_task(core);
+        task_control_block_t* next_task = scheduler_get_next_task(core);
         
         if (next_task && next_task != current_task[core]) {
             current_task[core] = next_task;
@@ -302,8 +322,8 @@ static bool scheduler_timer_callback(struct repeating_timer *t) {
                 stats.core1_switches++;
             }
             
-            if (tracing_enabled) {
-                LOG_DEBUG("Scheduler","[Scheduler] Core %d: switching to %s.", 
+            if (tracing_enabled && tick_count % 1000 == 0) {
+                log_message(LOG_LEVEL_DEBUG, "Scheduler","[Scheduler] Core %d: switching to %s.", 
                     core, next_task->name);
             }
         }
@@ -319,7 +339,7 @@ __attribute__((section(".time_critical")))
 void scheduler_core1_entry(void) {
     core_sync.core1_started = true;
     
-    LOG_INFO("Scheduler", "Core 1 started.");
+    log_message(LOG_LEVEL_INFO, "Scheduler", "Core 1 started.");
     
     while (1) {
         scheduler_run_pending_tasks();
@@ -331,7 +351,7 @@ void scheduler_core1_entry(void) {
 
 __attribute__((aligned(32)))
 bool scheduler_init(void) {
-    LOG_INFO("Scheduler Init","Initializing scheduler.");
+    log_message(LOG_LEVEL_INFO, "Scheduler Init","Initializing scheduler.");
     
     //Initialize synchronization objects
     core_sync.task_list_lock_num = hw_spinlock_allocate(SPINLOCK_CAT_SCHEDULER, "scheduler_task_list");
@@ -343,7 +363,7 @@ bool scheduler_init(void) {
     memset(tasks, 0, sizeof(tasks));
     memset(&stats, 0, sizeof(stats));
     
-    LOG_INFO("Scheduler Init","Initialized scheduler.");
+    log_message(LOG_LEVEL_INFO, "Scheduler Init","Initialized scheduler.");
     return true;
 }
 
@@ -353,7 +373,7 @@ bool scheduler_start(void) {
         return false;
     }
     
-    LOG_INFO("Scheduler", "Starting.");
+    log_message(LOG_LEVEL_INFO, "Scheduler", "Starting.");
 
     core_sync.scheduler_running = true;
     stats.total_runtime = time_us_64();
@@ -368,11 +388,11 @@ bool scheduler_start(void) {
     
     //Start scheduler timer
     if (!add_repeating_timer_ms(SCHEDULER_TICK_MS, scheduler_timer_callback, NULL, &scheduler_timer)) {
-        LOG_WARN("Scheduler", "Failed to start scheduler timer.");
+        log_message(LOG_LEVEL_WARN, "Scheduler", "Failed to start scheduler timer.");
         return false;
     }
     
-    LOG_INFO("Scheduler", "Scheduler running.");
+    log_message(LOG_LEVEL_INFO, "Scheduler", "Scheduler running.");
     return true;
 }
 
@@ -381,7 +401,7 @@ void scheduler_stop(void) {
     core_sync.scheduler_running = false;
     cancel_repeating_timer(&scheduler_timer);
     multicore_reset_core1();
-    LOG_WARN("Scheduler", "Scheduler stopped.");
+    log_message(LOG_LEVEL_WARN, "Scheduler", "Scheduler stopped.");
 }
 
 /**
@@ -437,7 +457,7 @@ int scheduler_create_task(task_func_t function, void *params, uint32_t stack_siz
     }
     
     if (tracing_enabled) {
-        LOG_INFO("Scheduler", "Created task %s (ID:%lu) on core %d.", task->name, task->task_id, target_core);
+        log_message(LOG_LEVEL_INFO, "Scheduler", "Created task %s (ID:%lu) on core %d.", task->name, task->task_id, target_core);
     }
     
     return task->task_id;
@@ -501,7 +521,11 @@ bool scheduler_get_task_info(int task_id, task_control_block_t *tcb) {
     bool found = false;
     
     //Search both cores for the task
-    for (int core = 0; core < 2 && !found; core++) {
+    for (int core = 0; core < 2; core++) {
+        if (found) {
+            break;
+        }
+
         for (int i = 0; i < MAX_TASKS; i++) {
             if (tasks[core][i].task_id == (uint32_t)task_id && 
                 tasks[core][i].state != TASK_STATE_INACTIVE) {
@@ -561,7 +585,7 @@ void scheduler_run_pending_tasks(void) {
 __attribute__((aligned(32)))
 void scheduler_enable_tracing(bool enable) {
     tracing_enabled = enable;
-    LOG_INFO("Scheduler", "Tracing %s.", enable ? "enabled" : "disabled");
+    log_message(LOG_LEVEL_INFO, "Scheduler", "Tracing %s.", enable ? "enabled" : "disabled");
 }
 
 /**
@@ -618,7 +642,11 @@ bool scheduler_set_deadline(int task_id, deadline_type_t type,
     bool found = false;
     
     // Search both cores for the task
-    for (int core = 0; core < 2 && !found; core++) {
+    for (int core = 0; core < 2; core++) {
+        if (found) {
+            break;
+        }
+
         for (int i = 0; i < MAX_TASKS; i++) {
             if (tasks[core][i].task_id == (uint32_t)task_id && 
                 tasks[core][i].state != TASK_STATE_INACTIVE) {
@@ -666,7 +694,11 @@ bool scheduler_set_deadline_miss_handler(int task_id, void (*handler)(uint32_t t
     bool found = false;
     
     // Search both cores for the task
-    for (int core = 0; core < 2 && !found; core++) {
+    for (int core = 0; core < 2; core++) {
+        if (found) {
+            break;
+        }
+        
         for (int i = 0; i < MAX_TASKS; i++) {
             if (tasks[core][i].task_id == (uint32_t)task_id && 
                 tasks[core][i].state != TASK_STATE_INACTIVE) {
@@ -700,7 +732,11 @@ bool scheduler_get_deadline_info(int task_id, deadline_info_t *info) {
     bool found = false;
     
     // Search both cores for the task
-    for (int core = 0; core < 2 && !found; core++) {
+    for (int core = 0; core < 2; core++) {
+        if (found) {
+            break;
+        }
+
         for (int i = 0; i < MAX_TASKS; i++) {
             if (tasks[core][i].task_id == (uint32_t)task_id && 
                 tasks[core][i].state != TASK_STATE_INACTIVE) {
@@ -967,29 +1003,7 @@ int cmd_deadline(int argc, char *argv[]) {
     }
     
     if (strcmp(argv[1], "set") == 0) {
-        if (argc < 7) {
-            printf("Usage: deadline set <task_id> <type> <period_ms> <deadline_ms> <budget_us>\n\r");
-            return 1;
-        }
-        
-        int task_id = atoi(argv[2]);
-        int type = atoi(argv[3]);
-        uint32_t period_ms = atoi(argv[4]);
-        uint32_t deadline_ms = atoi(argv[5]);
-        uint32_t budget_us = atoi(argv[6]);
-        
-        if (type < 0 || type > 2) {
-            printf("Invalid type: %d (must be 0-2)\n\r", type);
-            return 1;
-        }
-        
-        if (scheduler_set_deadline(task_id, (deadline_type_t)type, period_ms, deadline_ms, budget_us)) {
-            printf("Deadline set for task %d: type=%d, period=%lu ms, deadline=%lu ms, budget=%lu us\n\r",
-                  task_id, type, period_ms, deadline_ms, budget_us);
-        } else {
-            printf("Failed to set deadline for task %d\n\r", task_id);
-            return 1;
-        }
+        return cmd_deadline_set(argc, argv);
     }
     else if (strcmp(argv[1], "handler") == 0) {
         if (argc < 4) {
@@ -1022,43 +1036,77 @@ int cmd_deadline(int argc, char *argv[]) {
         }
     }
     else if (strcmp(argv[1], "info") == 0) {
-        if (argc < 3) {
-            printf("Usage: deadline info <task_id>\n\r");
-            return 1;
-        }
-        
-        int task_id = atoi(argv[2]);
-        deadline_info_t info;
-        
-        
-        if (scheduler_get_deadline_info(task_id, &info)) {
-            char deadline_type[5] = "None";
-
-            if (info.type == DEADLINE_NONE) {
-                strncpy(deadline_type, "None", 5);
-            } else if (info.type == DEADLINE_SOFT) {
-                strncpy(deadline_type, "Soft", 5);
-            } else {
-                strncpy(deadline_type, "Hard", 5);
-            }
-
-            printf("Deadline info for task %d:\n\r", task_id);
-            printf("  Type: %s\n\r", deadline_type);
-            printf("  Period: %lu ms\n\r", info.period_ms);
-            printf("  Deadline: %lu ms\n\r", info.deadline_ms);
-            printf("  Execution budget: %lu us\n\r", info.execution_budget_us);
-            printf("  Deadline misses: %lu\n\r", info.deadline_misses);
-            printf("  Last start time: %llu us\n\r", info.last_start_time);
-            printf("  Last completion time: %llu us\n\r", info.last_completion_time);
-        } else {
-            printf("Failed to get deadline info for task %d\n\r", task_id);
-            return 1;
-        }
+        return cmd_deadline_info(argc, argv);
     }
     else {
         printf("Unknown deadline command: %s\n\r", argv[1]);
         return 1;
     }
     
+    return 0;
+}
+
+static int cmd_deadline_info(int argc, char* argv[]) {
+    if (argc < 3) {
+            printf("Usage: deadline info <task_id>\n\r");
+            return 1;
+        }
+        
+    int task_id = atoi(argv[2]);
+    deadline_info_t info;
+        
+        
+    if (scheduler_get_deadline_info(task_id, &info)) {
+        char deadline_type[5] = "None";
+
+        if (info.type == DEADLINE_NONE) {
+            strncpy(deadline_type, "None", 5);
+        } else if (info.type == DEADLINE_SOFT) {
+            strncpy(deadline_type, "Soft", 5);
+        } else {
+            strncpy(deadline_type, "Hard", 5);
+        }
+
+        printf("Deadline info for task %d:\n\r", task_id);
+        printf("  Type: %s\n\r", deadline_type);
+        printf("  Period: %lu ms\n\r", info.period_ms);
+        printf("  Deadline: %lu ms\n\r", info.deadline_ms);
+        printf("  Execution budget: %lu us\n\r", info.execution_budget_us);
+        printf("  Deadline misses: %lu\n\r", info.deadline_misses);
+        printf("  Last start time: %llu us\n\r", info.last_start_time);
+        printf("  Last completion time: %llu us\n\r", info.last_completion_time);
+    } else {
+        printf("Failed to get deadline info for task %d\n\r", task_id);
+        return 1;
+    }
+
+    return 0;
+}
+
+static int cmd_deadline_set(int argc, char* argv[]) {
+    if (argc < 7) {
+        printf("Usage: deadline set <task_id> <type> <period_ms> <deadline_ms> <budget_us>\n\r");
+        return 1;
+    }
+        
+    int task_id = atoi(argv[2]);
+    int type = atoi(argv[3]);
+    uint32_t period_ms = atoi(argv[4]);
+    uint32_t deadline_ms = atoi(argv[5]);
+    uint32_t budget_us = atoi(argv[6]);
+        
+    if (type < 0 || type > 2) {
+        printf("Invalid type: %d (must be 0-2)\n\r", type);
+        return 1;
+    }
+        
+    if (scheduler_set_deadline(task_id, (deadline_type_t)type, period_ms, deadline_ms, budget_us)) {
+        printf("Deadline set for task %d: type=%d, period=%lu ms, deadline=%lu ms, budget=%lu us\n\r",
+            task_id, type, period_ms, deadline_ms, budget_us);
+    } else {
+        printf("Failed to set deadline for task %d\n\r", task_id);
+        return 1;
+    }
+
     return 0;
 }

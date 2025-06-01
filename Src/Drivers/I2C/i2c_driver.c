@@ -61,7 +61,7 @@ static bool i2c_spinlock_callback(spinlock_init_phase_t phase, void* context) {
             
         case SPINLOCK_INIT_PHASE_FULL:
             // Now we can use proper logging
-            LOG_INFO("I2C Driver", "I2C driver spinlock fully integrated with manager");
+            log_message(LOG_LEVEL_INFO, "I2C Driver", "I2C driver spinlock fully integrated with manager");
             return true;
             
         default:
